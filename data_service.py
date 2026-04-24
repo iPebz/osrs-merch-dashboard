@@ -35,16 +35,12 @@ class DataService:
         upsert_items(self.db, mapping)
 
         status("Fetching current prices…")
-        wiki_limiter.wait()
+        # No rate-limiter wait here — first API call of the session
         latest = get_latest()
         save_snapshots(self.db, latest, interval="latest")
 
-        status("Fetching 24h market data…")
-        wiki_limiter.wait()
-        bulk_24h = get_bulk("24h")
-        save_snapshots(self.db, bulk_24h, interval="24h")
-
         status("Ready.")
+        # 24h bulk fetch runs in background (avoids blocking startup for 60s)
 
     # ------------------------------------------------------------------
     # On-demand
@@ -63,32 +59,18 @@ class DataService:
         return ts
 
     def score_all_items(self) -> list[dict]:
-        import config
         item_ids     = get_item_ids_for_scoring(self.db)
         all_items    = {i["id"]: i for i in get_all_items(self.db)}
         news_by_item = get_news_signals_for_items(self.db)
-        seeds        = set(config.HIGH_VALUE_SEEDS.keys())
 
         results = []
         for item_id in item_ids:
             item = all_items.get(item_id)
             if not item:
                 continue
-
             ts = get_snapshots(self.db, item_id, interval="24h", limit=365)
-
-            # Seed items with thin local history: fetch full timeseries from API
-            if item_id in seeds and len(ts) < 30:
-                try:
-                    fetched = self.get_timeseries_for_item(item_id)
-                    if fetched:
-                        ts = fetched
-                except Exception as e:
-                    log.warning("Timeseries fetch failed for %d: %s", item_id, e)
-
             if not ts:
                 continue
-
             item_signals = news_by_item.get(item_id, [])
             score_dict   = score_item(ts,
                                       buy_limit=item.get("buy_limit") or 0,
@@ -164,7 +146,18 @@ class DataService:
             daemon=True,
         )
         self._thread.start()
+        # Fetch the 24h bulk snapshot in background (respects 60s rate limit)
+        threading.Thread(target=self._background_bulk_24h, daemon=True).start()
         log.info("Background refresh started (every %ds).", interval_seconds)
+
+    def _background_bulk_24h(self):
+        try:
+            wiki_limiter.wait()
+            bulk = get_bulk("24h")
+            save_snapshots(self.db, bulk, interval="24h")
+            log.info("Background 24h bulk fetch complete (%d items).", len(bulk))
+        except Exception as e:
+            log.error("Background 24h fetch failed: %s", e)
 
     def stop(self):
         self._running = False

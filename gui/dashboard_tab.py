@@ -16,6 +16,12 @@ COLUMNS = [
     ("Reason",     240),
 ]
 
+ROW_BG      = "#1a1a2e"
+ROW_ALT_BG  = "#16213e"
+ROW_NEWS_BG = "#0a2a0a"
+CARD_BG     = "#16213e"
+CARD_NEWS_BG = "#0a2a0a"
+
 
 class DashboardTab(ctk.CTkFrame):
     def __init__(self, parent, db_conn, data_service, on_chart_select=None):
@@ -41,18 +47,17 @@ class DashboardTab(ctk.CTkFrame):
 
         ctk.CTkLabel(
             outer, text="TOP PICKS", font=FONT_TITLE,
-            text_color="#f39c12",
+            text_color="#f39c12", fg_color="#0d1b2a",
         ).pack(side="left", padx=(10, 6), pady=6)
 
-        self._rec_cards_frame = ctk.CTkFrame(outer, fg_color="transparent")
+        self._rec_cards_frame = ctk.CTkFrame(outer, fg_color="#0d1b2a")
         self._rec_cards_frame.pack(side="left", fill="x", expand=True, pady=4)
 
-        self._rec_placeholder = ctk.CTkLabel(
+        ctk.CTkLabel(
             self._rec_cards_frame,
-            text='Click "Score All Items" to generate recommendations.',
-            font=FONT_LABEL, text_color="#555555",
-        )
-        self._rec_placeholder.pack(side="left", padx=8)
+            text='Press "Score All Items" to generate recommendations.',
+            font=FONT_LABEL, text_color="#555555", fg_color="#0d1b2a",
+        ).pack(side="left", padx=8)
 
     def _update_recommendations(self, scored_items: list[dict]):
         for w in self._rec_cards_frame.winfo_children():
@@ -63,7 +68,7 @@ class DashboardTab(ctk.CTkFrame):
             ctk.CTkLabel(
                 self._rec_cards_frame,
                 text="No items above score 50 yet.",
-                font=FONT_LABEL, text_color="#555555",
+                font=FONT_LABEL, text_color="#555555", fg_color="#0d1b2a",
             ).pack(side="left", padx=8)
             return
 
@@ -72,29 +77,28 @@ class DashboardTab(ctk.CTkFrame):
 
     def _add_rec_card(self, item: dict):
         has_news = bool(item.get("news_signals"))
-        card_bg  = "#0f2a0f" if has_news else "#16213e"
+        bg = CARD_NEWS_BG if has_news else CARD_BG
 
         card = ctk.CTkFrame(
             self._rec_cards_frame,
-            fg_color=card_bg, corner_radius=8, width=185,
+            fg_color=bg, corner_radius=8, width=190, height=100,
         )
         card.pack(side="left", padx=4, pady=2)
         card.pack_propagate(False)
 
-        # Name row + optional NEWS badge
-        name_row = ctk.CTkFrame(card, fg_color="transparent")
+        # Name row
+        name_row = ctk.CTkFrame(card, fg_color=bg)
         name_row.pack(fill="x", padx=6, pady=(5, 0))
 
-        name = item.get("name", "")
         ctk.CTkLabel(
-            name_row, text=name[:20], font=FONT_LABEL,
-            text_color="white", anchor="w",
+            name_row, text=item.get("name", "")[:20],
+            font=FONT_LABEL, text_color="white", fg_color=bg, anchor="w",
         ).pack(side="left")
 
         if has_news:
             ctk.CTkLabel(
-                name_row, text=" NEWS ", font=FONT_LABEL,
-                text_color="#2ecc71", fg_color="#0a2a0a",
+                name_row, text=" NEWS ",
+                font=FONT_LABEL, text_color="#2ecc71", fg_color="#0a3a0a",
                 corner_radius=4,
             ).pack(side="right")
 
@@ -102,29 +106,26 @@ class DashboardTab(ctk.CTkFrame):
         score = item.get("score", 0)
         ctk.CTkLabel(
             card, text=f"Score: {score:.0f}",
-            font=FONT_TITLE, text_color=score_color(score),
+            font=FONT_TITLE, text_color=score_color(score), fg_color=bg,
         ).pack(padx=6, anchor="w")
 
         # Price
         price = item.get("current_low", 0)
         price_str = f"{price/1e6:.2f}M" if price >= 1e6 else f"{price/1e3:.0f}k"
         ctk.CTkLabel(
-            card, text=price_str, font=FONT_LABEL, text_color="#aaaaaa",
+            card, text=price_str,
+            font=FONT_LABEL, text_color="#aaaaaa", fg_color=bg,
         ).pack(padx=6, anchor="w")
 
-        # Reason snippet
-        reason = item.get("reason", "")
+        # Reason
         ctk.CTkLabel(
-            card, text=reason[:45], font=FONT_LABEL,
-            text_color="#777777", wraplength=170, anchor="w",
-        ).pack(padx=6, pady=(0, 5), anchor="w")
+            card, text=item.get("reason", "")[:40],
+            font=FONT_LABEL, text_color="#888888", fg_color=bg,
+            wraplength=175, anchor="w",
+        ).pack(padx=6, pady=(0, 4), anchor="w")
 
-        # Make the whole card clickable
-        for widget in [card] + card.winfo_children() + \
-                       [w for row in card.winfo_children()
-                        for w in (row.winfo_children()
-                                  if hasattr(row, "winfo_children") else [])]:
-            widget.bind("<Button-1>", lambda _, r=item: self._on_row_click(r))
+        # Bind click to all widgets in card recursively
+        _bind_click(card, lambda _, r=item: self._on_row_click(r))
 
     # ------------------------------------------------------------------
     # Filter controls
@@ -218,28 +219,35 @@ class DashboardTab(ctk.CTkFrame):
             self._add_row(rank, row)
 
     def _add_row(self, rank: int, row: dict):
-        frame = ctk.CTkFrame(self._scroll, height=28)
+        has_news = bool(row.get("news_signals"))
+        bg = ROW_NEWS_BG if has_news else ROW_BG
+
+        frame = ctk.CTkFrame(self._scroll, height=32, fg_color=bg)
         frame.pack(fill="x", pady=1)
+        frame.pack_propagate(False)
 
         score = row.get("score", 0)
         s30   = row.get("slope_30d", 0) or 0
         s90   = row.get("slope_90d", 0) or 0
 
-        has_news = bool(row.get("news_signals"))
-        if has_news:
-            frame.configure(fg_color="#0f2a0f")
-
         def cell(text, width, fg=None):
-            lbl = ctk.CTkLabel(frame, text=str(text), width=width,
-                               font=FONT_LABEL, text_color=fg or "white",
-                               anchor="e")
+            lbl = ctk.CTkLabel(
+                frame, text=str(text), width=width,
+                font=FONT_LABEL,
+                text_color=fg if fg else "white",
+                fg_color=bg,
+                anchor="e",
+            )
             lbl.pack(side="left", padx=1)
             return lbl
 
         cell(rank,                               COLUMNS[0][1])
 
-        name_lbl = ctk.CTkLabel(frame, text=row.get("name", ""),
-                                width=COLUMNS[1][1], font=FONT_LABEL, anchor="w")
+        name_lbl = ctk.CTkLabel(
+            frame, text=row.get("name", ""),
+            width=COLUMNS[1][1], font=FONT_LABEL,
+            text_color="white", fg_color=bg, anchor="w",
+        )
         name_lbl.pack(side="left", padx=1)
         name_lbl.bind("<Button-1>", lambda _, r=row: self._on_row_click(r))
 
@@ -257,6 +265,7 @@ class DashboardTab(ctk.CTkFrame):
             frame, text=reason_text,
             width=COLUMNS[10][1], font=FONT_LABEL, anchor="w",
             text_color="#2ecc71" if has_news else "#aaaaaa",
+            fg_color=bg,
         ).pack(side="left", padx=2)
 
     def _on_row_click(self, row: dict):
@@ -274,3 +283,10 @@ class DashboardTab(ctk.CTkFrame):
 
     def reload(self):
         self._apply_filters()
+
+
+def _bind_click(widget, handler):
+    """Recursively bind a click handler to a widget and all its children."""
+    widget.bind("<Button-1>", handler)
+    for child in widget.winfo_children():
+        _bind_click(child, handler)

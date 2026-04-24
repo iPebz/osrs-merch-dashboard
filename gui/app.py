@@ -58,6 +58,9 @@ class App(ctk.CTk):
                       fg_color="#1a4a1a", hover_color="#2a6a2a",
                       command=self._fetch_news).pack(side="right", padx=4)
 
+        # Auto-score on startup once the window is ready
+        self.after(300, self._score_all)
+
     # ------------------------------------------------------------------
 
     def _refresh(self):
