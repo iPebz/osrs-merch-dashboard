@@ -42,7 +42,7 @@ def save_snapshots(conn: sqlite3.Connection, data: dict, interval: str):
                              avgHighPrice, avgLowPrice,
                              highPriceVolume, lowPriceVolume,
                              timestamp }, ... }
-    Handles both /latest and /5m|/1h|/24h response shapes.
+    Uses INSERT OR IGNORE so duplicate (item_id, timestamp, interval) rows are skipped.
     """
     import time as _time
 
@@ -71,7 +71,8 @@ def save_snapshots(conn: sqlite3.Connection, data: dict, interval: str):
 
     conn.executemany(
         """
-        INSERT INTO price_snapshots (item_id, timestamp, high, low, high_vol, low_vol, interval)
+        INSERT OR IGNORE INTO price_snapshots
+            (item_id, timestamp, high, low, high_vol, low_vol, interval)
         VALUES (?, ?, ?, ?, ?, ?, ?)
         """,
         rows,
@@ -95,14 +96,43 @@ def get_snapshots(conn: sqlite3.Connection, item_id: int,
     rows = cursor.fetchall()
     return [
         {
-            "timestamp":          r["timestamp"],
-            "avgHighPrice":       r["high"],
-            "avgLowPrice":        r["low"],
-            "highPriceVolume":    r["high_vol"],
-            "lowPriceVolume":     r["low_vol"],
+            "timestamp":       r["timestamp"],
+            "avgHighPrice":    r["high"],
+            "avgLowPrice":     r["low"],
+            "highPriceVolume": r["high_vol"],
+            "lowPriceVolume":  r["low_vol"],
         }
         for r in reversed(rows)
     ]
+
+
+def get_all_snapshots_batch(conn: sqlite3.Connection) -> dict:
+    """
+    Single query returning ALL 24h snapshots grouped by item_id.
+    Replaces N individual get_snapshots() calls in score_all_items.
+    Returns {item_id: [snapshot_dict, ...]} sorted oldest-first.
+    """
+    cursor = conn.execute(
+        """
+        SELECT item_id, timestamp, high, low, high_vol, low_vol
+        FROM   price_snapshots
+        WHERE  interval = '24h'
+        ORDER  BY item_id, timestamp ASC
+        """
+    )
+    result: dict[int, list[dict]] = {}
+    for row in cursor:
+        iid = row["item_id"]
+        if iid not in result:
+            result[iid] = []
+        result[iid].append({
+            "timestamp":       row["timestamp"],
+            "avgHighPrice":    row["high"],
+            "avgLowPrice":     row["low"],
+            "highPriceVolume": row["high_vol"],
+            "lowPriceVolume":  row["low_vol"],
+        })
+    return result
 
 
 def get_all_items(conn: sqlite3.Connection) -> list[dict]:
@@ -121,7 +151,7 @@ def get_item_ids_for_scoring(conn: sqlite3.Connection) -> list[int]:
         """
         SELECT DISTINCT item_id FROM price_snapshots
         WHERE interval = '24h'
-        GROUP BY item_id HAVING COUNT(*) >= 2
+        GROUP BY item_id HAVING COUNT(DISTINCT timestamp) >= 1
         """
     )
     return [r[0] for r in cursor.fetchall()]

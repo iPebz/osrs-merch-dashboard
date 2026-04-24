@@ -1,5 +1,5 @@
-BUDGET_MIN_GP = 10_000
-BUDGET_MAX_GP = 50_000_000
+BUDGET_MIN_GP = 1              # no lower cap — let volume filter remove junk
+BUDGET_MAX_GP = 2_000_000_000  # 2B cap covers all tradeable OSRS items
 
 WEIGHT_TREND  = 1.0
 WEIGHT_RSI    = 1.0
@@ -9,7 +9,7 @@ WEIGHT_VOLUME = 0.7
 
 DEFAULT_SCORE_THRESHOLD    = 40
 REFRESH_INTERVAL_SECONDS   = 90
-MIN_DAILY_VOLUME           = 100
+MIN_DAILY_VOLUME           = 50   # lowered — catches bulk commodity items
 ALERT_COOLDOWN_MINUTES     = 60
 
 DB_PATH = "data/ge_prices.db"

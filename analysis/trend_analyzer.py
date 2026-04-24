@@ -88,3 +88,81 @@ def volume_trend(df: pd.DataFrame, short: int = 7, long: int = 30) -> str:
     if ratio < 0.8:
         return "FALLING"
     return "STABLE"
+
+
+# ── New indicators ─────────────────────────────────────────────────────────────
+
+def price_vs_ma(df: pd.DataFrame, window: int = 90) -> float:
+    """Current mid price % above/below its moving average. Negative = below MA (potential buy zone)."""
+    ma_series = moving_average(df, window)
+    if ma_series.empty:
+        return 0.0
+    ma_val = ma_series.iloc[-1]
+    if pd.isna(ma_val) or ma_val == 0:
+        return 0.0
+    current = df["mid"].iloc[-1]
+    return float((current - ma_val) / ma_val * 100)
+
+
+def support_level(df: pd.DataFrame, lookback: int = 90, pct: float = 10) -> float:
+    """Price floor: Nth percentile of recent lows over lookback days."""
+    recent = df.tail(lookback)["low"].dropna()
+    return float(np.percentile(recent, pct)) if len(recent) >= 5 else 0.0
+
+
+def resistance_level(df: pd.DataFrame, lookback: int = 90, pct: float = 90) -> float:
+    """Price ceiling: Nth percentile of recent highs over lookback days."""
+    recent = df.tail(lookback)["high"].dropna()
+    return float(np.percentile(recent, pct)) if len(recent) >= 5 else 0.0
+
+
+def multi_timeframe_agreement(df: pd.DataFrame) -> int:
+    """
+    Count of timeframes (7d/30d/90d) all trending the same direction.
+    Returns +3 all up, -3 all down, or partial counts.
+    """
+    s7  = price_slope(df, 7)
+    s30 = price_slope(df, 30)
+    s90 = price_slope(df, 90)
+    slopes = [s7, s30, s90]
+    ups   = sum(1 for s in slopes if s > 0.05)
+    downs = sum(1 for s in slopes if s < -0.05)
+    if ups == 3:
+        return 3
+    if downs == 3:
+        return -3
+    return ups - downs
+
+
+def liquidity_score(avg_daily_vol: float, buy_limit: int) -> float:
+    """
+    Ratio of daily volume to buy limit.
+    >6  = very liquid (fills multiple times/day)
+    1-6 = normal
+    <1  = illiquid (may take >4h to fill one cycle)
+    """
+    if buy_limit <= 0:
+        return 0.0
+    return avg_daily_vol / buy_limit
+
+
+def estimated_daily_flip_profit(margin_gp: float, buy_limit: int,
+                                avg_daily_vol: float) -> float:
+    """
+    Estimate how much GP per day from instant-flipping this item.
+    Accounts for GE 1% tax (capped at 5M per trade).
+    """
+    if buy_limit <= 0 or margin_gp <= 0:
+        return 0.0
+    max_cycles_by_vol  = avg_daily_vol / buy_limit if buy_limit > 0 else 0
+    cycles_per_day     = min(6.0, max_cycles_by_vol)  # 4h cooldown → max 6/day
+    return margin_gp * buy_limit * cycles_per_day
+
+
+def price_momentum(df: pd.DataFrame, short: int = 7, long: int = 30) -> float:
+    """
+    Momentum: short-term slope minus long-term slope.
+    Positive = accelerating upward (good entry).
+    Negative = decelerating / rolling over (caution).
+    """
+    return price_slope(df, short) - price_slope(df, long)

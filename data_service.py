@@ -7,7 +7,7 @@ from analysis.opportunity_scorer import score_item
 from analysis.alert_engine import check_alerts
 from database.queries import (
     upsert_items, save_snapshots, get_item_ids_for_scoring,
-    get_snapshots, get_all_items, get_item_icon_urls,
+    get_snapshots, get_all_snapshots_batch, get_all_items, get_item_icon_urls,
     replace_news_signals, get_news_signals_for_items,
 )
 
@@ -59,17 +59,15 @@ class DataService:
         return ts
 
     def score_all_items(self) -> list[dict]:
-        item_ids     = get_item_ids_for_scoring(self.db)
+        # Single batch query instead of N individual get_snapshots() calls
         all_items    = {i["id"]: i for i in get_all_items(self.db)}
         news_by_item = get_news_signals_for_items(self.db)
+        all_snapshots = get_all_snapshots_batch(self.db)  # 1 query for all items
 
         results = []
-        for item_id in item_ids:
+        for item_id, ts in all_snapshots.items():
             item = all_items.get(item_id)
-            if not item:
-                continue
-            ts = get_snapshots(self.db, item_id, interval="24h", limit=365)
-            if not ts:
+            if not item or len(ts) < 1:
                 continue
             item_signals = news_by_item.get(item_id, [])
             score_dict   = score_item(ts,

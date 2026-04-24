@@ -12,14 +12,14 @@ CREATE TABLE IF NOT EXISTS items (
 
 CREATE_PRICE_SNAPSHOTS = """
 CREATE TABLE IF NOT EXISTS price_snapshots (
-    id       INTEGER PRIMARY KEY AUTOINCREMENT,
-    item_id  INTEGER NOT NULL,
+    id        INTEGER PRIMARY KEY AUTOINCREMENT,
+    item_id   INTEGER NOT NULL,
     timestamp INTEGER NOT NULL,
-    high     INTEGER,
-    low      INTEGER,
-    high_vol INTEGER,
-    low_vol  INTEGER,
-    interval TEXT NOT NULL,
+    high      INTEGER,
+    low       INTEGER,
+    high_vol  INTEGER,
+    low_vol   INTEGER,
+    interval  TEXT NOT NULL,
     FOREIGN KEY (item_id) REFERENCES items(id)
 );
 """
@@ -73,4 +73,28 @@ def init_db(conn):
                  CREATE_WATCHLIST, CREATE_ALERTS_LOG,
                  CREATE_NEWS_SIGNALS, CREATE_INDEXES]:
         cursor.executescript(stmt)
+    _migrate(conn)
     conn.commit()
+
+
+def _migrate(conn):
+    """Idempotent migrations applied to existing databases."""
+    # Migration 1: deduplicate snapshots and add unique index to prevent future dupes
+    exists = conn.execute(
+        "SELECT name FROM sqlite_master WHERE type='index' AND name='idx_snapshots_unique'"
+    ).fetchone()
+    if not exists:
+        # Remove duplicate rows, keeping the most-recently inserted one per (item, ts, interval)
+        conn.execute("""
+            DELETE FROM price_snapshots
+            WHERE id NOT IN (
+                SELECT MAX(id)
+                FROM   price_snapshots
+                GROUP  BY item_id, timestamp, interval
+            )
+        """)
+        conn.execute("""
+            CREATE UNIQUE INDEX idx_snapshots_unique
+                ON price_snapshots (item_id, timestamp, interval)
+        """)
+        conn.commit()

@@ -1,21 +1,38 @@
 """
-Groups scored items into price-range buckets and builds detailed analysis text.
+Groups scored items into price-range buckets and strategy categories,
+and generates detailed human-readable analysis text.
 """
 
 PRICE_RANGES = [
-    ("<1M",      0,            1_000_000),
-    ("1–5M",     1_000_000,    5_000_000),
-    ("10–20M",   10_000_000,  20_000_000),
-    ("25–50M",   25_000_000,  50_000_000),
-    ("50–100M",  50_000_000, 100_000_000),
-    ("100M+",   100_000_000,  float("inf")),
+    ("<1M",      0,              1_000_000),
+    ("1–5M",     1_000_000,      5_000_000),
+    ("10–25M",   10_000_000,    25_000_000),
+    ("25–100M",  25_000_000,   100_000_000),
+    ("100M+",   100_000_000,   float("inf")),
 ]
 
-TOP_N = 3
+STRATEGIES = ["FLIP", "MERCH", "TREND", "NEWS"]
+
+STRATEGY_LABELS = {
+    "FLIP":  "Best Flips",
+    "MERCH": "Dip Buys (Merch)",
+    "TREND": "Trend Rides",
+    "NEWS":  "News Plays",
+}
+
+STRATEGY_DESC = {
+    "FLIP":  "High margin after GE tax — buy and sell for quick profit",
+    "MERCH": "Price is below long-term average — buy the dip, sell the recovery",
+    "TREND": "Multi-timeframe uptrend with room to run — ride the momentum",
+    "NEWS":  "Game update or market signal detected — demand catalyst present",
+}
+
+TOP_N_PRICE  = 3
+TOP_N_STRAT  = 5
 
 
 def group_by_price_range(scored_items: list[dict]) -> dict[str, list[dict]]:
-    """Return {range_label: [top-N items sorted by score]}."""
+    """Return {range_label: top-N items sorted by score}."""
     buckets: dict[str, list[dict]] = {label: [] for label, *_ in PRICE_RANGES}
     for item in scored_items:
         price = item.get("current_low", 0) or 0
@@ -25,120 +42,181 @@ def group_by_price_range(scored_items: list[dict]) -> dict[str, list[dict]]:
                 break
     for label in buckets:
         buckets[label].sort(key=lambda r: r.get("score", 0), reverse=True)
-        buckets[label] = buckets[label][:TOP_N]
+        buckets[label] = buckets[label][:TOP_N_PRICE]
+    return buckets
+
+
+def group_by_strategy(scored_items: list[dict]) -> dict[str, list[dict]]:
+    """Return {strategy: top-N items for that strategy sorted by score}."""
+    buckets: dict[str, list[dict]] = {s: [] for s in STRATEGIES}
+    for item in scored_items:
+        strat = item.get("strategy", "FLIP")
+        if strat in buckets:
+            buckets[strat].append(item)
+
+    # Secondary sort keys per strategy
+    sort_keys = {
+        "FLIP":  lambda r: r.get("daily_flip_profit", 0) or 0,
+        "MERCH": lambda r: r.get("merch_profit", 0) or 0,
+        "TREND": lambda r: r.get("score", 0) or 0,
+        "NEWS":  lambda r: r.get("score", 0) or 0,
+    }
+    for strat in buckets:
+        buckets[strat].sort(key=sort_keys[strat], reverse=True)
+        buckets[strat] = buckets[strat][:TOP_N_STRAT]
     return buckets
 
 
 def build_summary(item: dict) -> str:
-    """One-line summary for a card header."""
-    parts = []
-    score = item.get("score", 0)
-    rsi   = item.get("rsi", 50)
-    s90   = item.get("slope_90d", 0) or 0
-    is_dip = item.get("is_dip", False)
-    margin = item.get("margin_pct", 0) or 0
+    """One-line card summary."""
+    strat  = item.get("strategy", "")
+    parts  = []
 
-    if is_dip:
-        parts.append("price dip vs 90d high")
-    if rsi < 35:
-        parts.append(f"oversold RSI {rsi:.0f}")
-    elif rsi < 45:
-        parts.append(f"low RSI {rsi:.0f}")
-    if s90 > 0.1:
-        parts.append("90d uptrend")
-    elif s90 < -0.1:
-        parts.append("90d downtrend")
-    if margin > 4:
-        parts.append(f"{margin:.1f}% margin")
-    if item.get("news_signals"):
-        parts.append("news signal")
-    return "; ".join(parts) if parts else item.get("reason", "Neutral")
+    if strat == "FLIP":
+        nm = item.get("net_margin_pct", 0) or 0
+        dp = item.get("daily_flip_profit", 0) or 0
+        parts.append(f"{nm:.1f}% net margin")
+        if dp > 0:
+            parts.append(f"~{_fmt_gp(int(dp))}/day")
+    elif strat == "MERCH":
+        ma = item.get("ma_deviation", 0) or 0
+        mp = item.get("merch_profit", 0) or 0
+        parts.append(f"{abs(ma):.0f}% below MA90")
+        if mp > 0:
+            parts.append(f"~{_fmt_gp(int(mp))} potential")
+    elif strat == "TREND":
+        s90 = item.get("slope_90d", 0) or 0
+        mtf = item.get("mtf_score", 0) or 0
+        parts.append(f"90d slope {s90:+.1f}%")
+        if mtf >= 2:
+            parts.append("all TFs aligned")
+    elif strat == "NEWS":
+        sigs = item.get("news_signals", [])
+        if sigs:
+            parts.append(sigs[0].get("article_title", "")[:40])
+
+    if not parts:
+        parts.append(item.get("reason", "")[:55])
+    return "; ".join(parts)
 
 
 def build_detail(item: dict) -> str:
-    """Multi-line detailed analysis for the expanded card view."""
+    """Multi-line detailed analysis for the expandable card view."""
+    strat  = item.get("strategy", "FLIP")
     name   = item.get("name", "")
     score  = item.get("score", 0)
     price  = item.get("current_low", 0) or 0
     high   = item.get("current_high", 0) or 0
-    margin = item.get("margin_pct", 0) or 0
+    nm_pct = item.get("net_margin_pct", 0) or 0
+    nm_gp  = item.get("net_margin_gp", 0) or 0
+    s7     = item.get("slope_7d", 0) or 0
     s30    = item.get("slope_30d", 0) or 0
     s90    = item.get("slope_90d", 0) or 0
-    rsi    = item.get("rsi", 50)
+    rsi_v  = item.get("rsi", 50)
     is_dip = item.get("is_dip", False)
-    vol_t  = item.get("vol_trend", "STABLE")
+    ma_dev = item.get("ma_deviation", 0) or 0
+    sup    = item.get("support", 0) or 0
+    res    = item.get("resistance", 0) or 0
+    upside = item.get("upside_pct", 0) or 0
+    mtf    = item.get("mtf_score", 0) or 0
+    liq    = item.get("liquidity", 0) or 0
     vol    = item.get("avg_daily_vol", 0) or 0
-    buy_lim = item.get("buy_limit", 0) or 0
+    vol_t  = item.get("vol_trend", "STABLE")
+    buy_lim= item.get("buy_limit", 0) or 0
     volat  = item.get("volatility", 0) or 0
-
-    price_str = _fmt_gp(price)
-    high_str  = _fmt_gp(high)
+    dfp    = item.get("daily_flip_profit", 0) or 0
+    mp     = item.get("merch_profit", 0) or 0
 
     lines = [
-        f"Score: {score:.0f}/100",
-        f"Buy price: {price_str}  |  Sell price: {high_str}  |  Margin: {margin:.1f}%",
+        f"[{strat}] Score: {score:.0f}/100",
+        f"Buy: {_fmt_gp(price)}  Sell: {_fmt_gp(high)}  Net margin: {nm_pct:.1f}% ({_fmt_gp(int(nm_gp))} after GE tax)",
         "",
-        "TREND",
-        f"  30d slope: {s30:+.2f}%  |  90d slope: {s90:+.2f}%",
     ]
 
-    if is_dip:
-        lines.append("  Currently in a price dip vs 90-day high — potential bounce opportunity")
-    if s90 > 0.1:
-        lines.append("  Long-term uptrend supports entry here")
-    elif s90 < -0.15:
-        lines.append("  Caution: long-term downtrend — higher risk play")
+    # Strategy-specific guidance
+    if strat == "FLIP":
+        lines += [
+            "HOW TO FLIP",
+            f"  1. Offer to buy at {_fmt_gp(price)} (or check buy price with 1-item offer)",
+            f"  2. Sell at {_fmt_gp(high)} (or +1 gp above current sell)",
+            f"  Buy limit: {buy_lim:,} every 4h",
+        ]
+        if dfp > 0:
+            lines.append(f"  Est. daily profit: ~{_fmt_gp(int(dfp))} ({_fmt_gp(int(dfp/6))} per 4h cycle)")
+        if liq < 1:
+            lines.append(f"  WARNING: Low liquidity ({liq:.1f}x) — may take >4h to fill")
+        elif liq > 6:
+            lines.append(f"  Good liquidity ({liq:.1f}x buy limit trades daily)")
 
-    lines += [
-        "",
-        "MOMENTUM",
-        f"  RSI: {rsi:.0f}  {'(oversold — historically good entry)' if rsi < 35 else '(neutral)' if rsi < 55 else '(overbought — watch for pullback)'}",
-        f"  Volume trend: {vol_t}  |  Avg daily: {vol:,.0f}",
-    ]
+    elif strat == "MERCH":
+        lines += [
+            "HOW TO MERCH",
+            f"  1. Buy at or below {_fmt_gp(price)}",
+            f"  2. Target sell: {_fmt_gp(int(res))} (resistance) or {_fmt_gp(int(max(res, price * 1.15)))} (+15%)",
+            f"  Est. profit if target hit: ~{_fmt_gp(int(mp))} (× {buy_lim:,} buy limit)",
+        ]
+        if ma_dev < -15:
+            lines.append(f"  Price is {abs(ma_dev):.0f}% below its 90d average — historically strong entry")
+        if sup > 0:
+            lines.append(f"  Support floor: ~{_fmt_gp(int(sup))} — set stop-loss just below this")
 
-    lines += [
-        "",
-        "TRADE SETUP",
-        f"  Buy limit: {buy_lim:,} / 4h",
-        f"  Suggested buy: ≤ {price_str}   Target sell: ≥ {high_str}",
-    ]
+    elif strat == "TREND":
+        lines += [
+            "HOW TO TRADE",
+            f"  Buy in on a pullback toward {_fmt_gp(int(sup))} (support)",
+            f"  Ride to {_fmt_gp(int(res))} ({upside:.0f}% upside to resistance)",
+            f"  Exit if RSI breaks above 70 or price closes below MA30",
+        ]
 
-    if margin >= 2 and buy_lim > 0:
-        profit = price * buy_lim * (margin / 100)
-        lines.append(f"  Est. profit per fill: {_fmt_gp(int(profit))} (at {margin:.1f}% margin × {buy_lim:,} items)")
-
-    news = item.get("news_signals", [])
-    if news:
-        lines += ["", "NEWS / MARKET SIGNALS"]
+    elif strat == "NEWS":
+        lines += ["NEWS CATALYST"]
         seen = set()
-        for sig in news[:3]:
-            title = sig.get("article_title", "")[:60]
-            stype = sig.get("signal_type", "")
-            if title not in seen:
-                seen.add(title)
+        for sig in (item.get("news_signals") or [])[:3]:
+            t = sig.get("article_title", "")[:60]
+            if t not in seen:
+                seen.add(t)
                 badge = {"game_update": "[UPDATE]", "ge_rise": "[GE RISE]",
-                         "mentioned": "[MENTIONED]"}.get(stype, "[SIGNAL]")
-                lines.append(f"  {badge} {title}")
+                         "mentioned": "[MENTION]"}.get(sig.get("signal_type",""), "[SIG]")
+                lines.append(f"  {badge} {t}")
+        lines += [
+            "",
+            "  Strategy: buy before market fully prices in the news,",
+            f"  target {_fmt_gp(int(res))} or +20% within 1–3 days",
+        ]
 
     lines += [
+        "",
+        "TECHNICALS",
+        f"  7d: {s7:+.2f}%  30d: {s30:+.2f}%  90d: {s90:+.2f}%",
+        f"  RSI: {rsi_v:.0f}  {'(oversold)' if rsi_v < 35 else '(neutral)' if rsi_v < 60 else '(overbought)'}",
+        f"  Multi-TF agreement: {mtf:+d}/3",
+        f"  Daily volume: {vol:,.0f}  Trend: {vol_t}",
+        f"  Volatility (30d): {volat:.1f}%",
+        f"  Support: {_fmt_gp(int(sup))}  Resistance: {_fmt_gp(int(res))}",
         "",
         "RISK",
     ]
-    if volat > 5:
-        lines.append(f"  High volatility ({volat:.1f}%) — price can swing quickly")
-    elif volat > 2:
-        lines.append(f"  Moderate volatility ({volat:.1f}%)")
+
+    if volat > 8:
+        lines.append(f"  HIGH volatility ({volat:.1f}%) — price can move 8%+ in a day")
+    elif volat > 4:
+        lines.append(f"  Moderate volatility ({volat:.1f}%) — normal for this item class")
     else:
-        lines.append(f"  Low volatility ({volat:.1f}%) — stable price action")
-    if s90 < -0.1:
-        lines.append("  Long-term trend is down — set a stop-loss")
+        lines.append(f"  Low volatility ({volat:.1f}%) — stable, predictable price action")
+
+    if s90 < -0.2:
+        lines.append("  Long-term downtrend still intact — higher risk, tighter stop")
+    if liq < 0.5:
+        lines.append("  Illiquid — hard to buy/sell quickly; avoid large positions")
 
     return "\n".join(lines)
 
 
 def _fmt_gp(gp: int) -> str:
+    if gp >= 1_000_000_000:
+        return f"{gp/1_000_000_000:.2f}B"
     if gp >= 1_000_000:
         return f"{gp/1_000_000:.2f}M"
     if gp >= 1_000:
         return f"{gp/1_000:.0f}k"
-    return str(gp)
+    return f"{gp:,}"

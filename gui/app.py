@@ -69,8 +69,10 @@ class App(ctk.CTk):
 
         # Load icon URLs once so dashboard & recommendations can use them
         self.after(200, self._load_icon_urls)
-        # Auto-score on startup once the window is ready
-        self.after(500, self._score_all)
+        # Auto-score on startup
+        self.after(800, self._score_all)
+        # Re-score after background 24h bulk fetch completes (~65s after start)
+        self.after(70_000, self._score_all)
 
     # ------------------------------------------------------------------
 
