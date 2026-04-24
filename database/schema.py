@@ -46,15 +46,31 @@ CREATE TABLE IF NOT EXISTS alerts_log (
 );
 """
 
+CREATE_NEWS_SIGNALS = """
+CREATE TABLE IF NOT EXISTS news_signals (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    item_id       INTEGER NOT NULL,
+    article_title TEXT NOT NULL,
+    article_url   TEXT NOT NULL,
+    article_date  TEXT NOT NULL,
+    signal_type   TEXT NOT NULL,
+    scraped_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (item_id) REFERENCES items(id)
+);
+"""
+
 CREATE_INDEXES = """
 CREATE INDEX IF NOT EXISTS idx_snapshots_item_time
     ON price_snapshots (item_id, timestamp, interval);
+CREATE INDEX IF NOT EXISTS idx_news_item
+    ON news_signals (item_id, scraped_at);
 """
 
 
 def init_db(conn):
     cursor = conn.cursor()
     for stmt in [CREATE_ITEMS, CREATE_PRICE_SNAPSHOTS,
-                 CREATE_WATCHLIST, CREATE_ALERTS_LOG, CREATE_INDEXES]:
+                 CREATE_WATCHLIST, CREATE_ALERTS_LOG,
+                 CREATE_NEWS_SIGNALS, CREATE_INDEXES]:
         cursor.executescript(stmt)
     conn.commit()

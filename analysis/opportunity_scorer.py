@@ -6,8 +6,14 @@ from analysis.trend_analyzer import (
 BUDGET_MIN_PRICE = 10_000
 BUDGET_MAX_PRICE = 50_000_000
 
+# Max score boost from news signals (capped so technicals still matter)
+NEWS_BOOST_GAME_UPDATE = 20
+NEWS_BOOST_GE_RISE     = 12
+NEWS_BOOST_MENTIONED   = 8
 
-def score_item(timeseries: list[dict], buy_limit: int) -> dict:
+
+def score_item(timeseries: list[dict], buy_limit: int,
+               news_signals: list[dict] | None = None) -> dict:
     if not timeseries or len(timeseries) < 14:
         return {"score": 0, "reason": "Insufficient data"}
 
@@ -52,10 +58,31 @@ def score_item(timeseries: list[dict], buy_limit: int) -> dict:
     if avg_daily_vol > 1000:  score += 5
     elif avg_daily_vol < 100: score -= 15
 
-    if vol_trend == "RISING":  score += 5
+    if vol_trend == "RISING":   score += 5
     elif vol_trend == "FALLING": score -= 5
 
+    # News / market signal boost (take the strongest single signal)
+    news_boost = 0
+    news_label = ""
+    if news_signals:
+        for sig in news_signals:
+            stype = sig.get("signal_type", "")
+            if stype == "game_update" and NEWS_BOOST_GAME_UPDATE > news_boost:
+                news_boost = NEWS_BOOST_GAME_UPDATE
+                news_label = f"update: {sig['article_title'][:35]}"
+            elif stype == "ge_rise" and NEWS_BOOST_GE_RISE > news_boost:
+                news_boost = NEWS_BOOST_GE_RISE
+                news_label = f"GE rising ({sig['article_title']})"
+            elif stype == "mentioned" and NEWS_BOOST_MENTIONED > news_boost:
+                news_boost = NEWS_BOOST_MENTIONED
+                news_label = f"in news: {sig['article_title'][:35]}"
+
+    score += news_boost
     score = max(0.0, min(100.0, score))
+
+    tech_reason = _build_tech_reason(slope_90d, item_rsi, is_dip, margin_pct)
+    reason_parts = [p for p in [tech_reason, news_label] if p and p != "Neutral"]
+    reason = "; ".join(reason_parts) if reason_parts else "Neutral"
 
     return {
         "score":         round(score, 1),
@@ -70,15 +97,16 @@ def score_item(timeseries: list[dict], buy_limit: int) -> dict:
         "volatility":    round(item_vol, 2),
         "avg_daily_vol": round(avg_daily_vol),
         "buy_limit":     buy_limit,
-        "reason":        _build_reason(slope_90d, item_rsi, is_dip, margin_pct),
+        "news_signals":  news_signals or [],
+        "reason":        reason,
     }
 
 
-def _build_reason(slope_90d: float, item_rsi: float,
-                  is_dip: bool, margin_pct: float) -> str:
+def _build_tech_reason(slope_90d: float, item_rsi: float,
+                       is_dip: bool, margin_pct: float) -> str:
     reasons = []
     if slope_90d > 0.1:  reasons.append("90d uptrend")
     if item_rsi < 35:    reasons.append(f"oversold (RSI {item_rsi:.0f})")
     if is_dip:           reasons.append("price dip vs 90d high")
-    if margin_pct > 4:   reasons.append(f"{margin_pct:.1f}% avg margin")
+    if margin_pct > 4:   reasons.append(f"{margin_pct:.1f}% margin")
     return ", ".join(reasons) if reasons else "Neutral"

@@ -54,6 +54,9 @@ class App(ctk.CTk):
                       command=self._refresh).pack(side="right", padx=8)
         ctk.CTkButton(bottom, text="Score All Items", width=130,
                       command=self._score_all).pack(side="right", padx=4)
+        ctk.CTkButton(bottom, text="Fetch News", width=110,
+                      fg_color="#1a4a1a", hover_color="#2a6a2a",
+                      command=self._fetch_news).pack(side="right", padx=4)
 
     # ------------------------------------------------------------------
 
@@ -83,6 +86,21 @@ class App(ctk.CTk):
         except Exception as e:
             log.error("Scoring failed: %s", e)
             self.after(0, lambda: self._status_var.set(f"Scoring failed: {e}"))
+
+    def _fetch_news(self):
+        self._status_var.set("Fetching OSRS news and GE market data…")
+        threading.Thread(target=self._do_fetch_news, daemon=True).start()
+
+    def _do_fetch_news(self):
+        try:
+            summary = self.data_service.fetch_and_store_news()
+            msg = (f"News: {summary['news']} item signals, "
+                   f"{summary['movers']} GE movers. "
+                   f"Re-score to apply.")
+            self.after(0, lambda: self._status_var.set(msg))
+        except Exception as e:
+            log.error("News fetch failed: %s", e)
+            self.after(0, lambda: self._status_var.set(f"News fetch failed: {e}"))
 
     def _open_chart(self, item_id: int, item_name: str):
         self._status_var.set(f"Loading chart for {item_name}…")

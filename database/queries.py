@@ -194,3 +194,55 @@ def alert_recently_fired(conn: sqlite3.Connection, item_id: int,
         (item_id, alert_type, f"-{cooldown_minutes}"),
     )
     return cursor.fetchone() is not None
+
+
+# ---------------------------------------------------------------------------
+# News signals
+# ---------------------------------------------------------------------------
+
+def replace_news_signals(conn: sqlite3.Connection, signals: list[dict]):
+    """Delete all existing signals and insert the fresh batch atomically."""
+    conn.execute("DELETE FROM news_signals")
+    if signals:
+        conn.executemany(
+            """
+            INSERT INTO news_signals
+                (item_id, article_title, article_url, article_date, signal_type)
+            VALUES (:item_id, :article_title, :article_url, :article_date, :signal_type)
+            """,
+            signals,
+        )
+    conn.commit()
+    log.info("Stored %d news signals.", len(signals))
+
+
+def get_news_signals_for_items(conn: sqlite3.Connection) -> dict:
+    """Return {item_id: [signal_dict, ...]} for all stored signals."""
+    cursor = conn.execute(
+        """
+        SELECT item_id, article_title, article_url, article_date, signal_type
+        FROM   news_signals
+        ORDER  BY article_date DESC
+        """
+    )
+    result: dict = {}
+    for row in cursor.fetchall():
+        iid = row["item_id"]
+        result.setdefault(iid, []).append(dict(row))
+    return result
+
+
+def get_recent_news_signals(conn: sqlite3.Connection, limit: int = 50) -> list[dict]:
+    """Return latest signals across all items, for the news feed UI."""
+    cursor = conn.execute(
+        """
+        SELECT ns.item_id, i.name, ns.article_title, ns.article_url,
+               ns.article_date, ns.signal_type, ns.scraped_at
+        FROM   news_signals ns
+        JOIN   items i ON i.id = ns.item_id
+        ORDER  BY ns.scraped_at DESC, ns.article_date DESC
+        LIMIT  ?
+        """,
+        (limit,),
+    )
+    return [dict(r) for r in cursor.fetchall()]

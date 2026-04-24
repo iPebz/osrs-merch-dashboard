@@ -8,6 +8,7 @@ from analysis.alert_engine import check_alerts
 from database.queries import (
     upsert_items, save_snapshots, get_item_ids_for_scoring,
     get_snapshots, get_all_items,
+    replace_news_signals, get_news_signals_for_items,
 )
 
 log = logging.getLogger(__name__)
@@ -50,7 +51,6 @@ class DataService:
     # ------------------------------------------------------------------
 
     def get_timeseries_for_item(self, item_id: int) -> list[dict]:
-        # Try local DB first (saves API calls)
         cached = get_snapshots(self.db, item_id, interval="24h", limit=400)
         if len(cached) >= 30:
             log.debug("Cache hit for item %d (%d rows)", item_id, len(cached))
@@ -59,14 +59,13 @@ class DataService:
         item_limiter.wait()
         ts = get_timeseries(item_id, timestep="24h")
         if ts:
-            save_snapshots(self.db, {str(item_id): {}}, interval="24h")
-            # Save via bulk helper by re-keying into expected shape
             _save_timeseries(self.db, item_id, ts)
         return ts
 
     def score_all_items(self) -> list[dict]:
-        item_ids = get_item_ids_for_scoring(self.db)
+        item_ids  = get_item_ids_for_scoring(self.db)
         all_items = {i["id"]: i for i in get_all_items(self.db)}
+        news_by_item = get_news_signals_for_items(self.db)
 
         results = []
         for item_id in item_ids:
@@ -76,7 +75,10 @@ class DataService:
             ts = get_snapshots(self.db, item_id, interval="24h", limit=365)
             if not ts:
                 continue
-            score_dict = score_item(ts, buy_limit=item.get("buy_limit") or 0)
+            item_signals = news_by_item.get(item_id, [])
+            score_dict = score_item(ts,
+                                    buy_limit=item.get("buy_limit") or 0,
+                                    news_signals=item_signals)
             if score_dict.get("score", 0) > 0:
                 score_dict["item_id"] = item_id
                 score_dict["name"]    = item["name"]
@@ -85,6 +87,50 @@ class DataService:
         results.sort(key=lambda r: r.get("score", 0), reverse=True)
         log.info("Scored %d items.", len(results))
         return results
+
+    # ------------------------------------------------------------------
+    # News & GE market data
+    # ------------------------------------------------------------------
+
+    def fetch_and_store_news(self) -> dict:
+        """
+        Scrape OSRS news archive and GE market movers, match items,
+        store signals. Returns a summary dict.
+        """
+        from analysis.news_analyzer import fetch_news_signals
+        from api.ge_scraper import get_market_movers
+
+        items = get_all_items(self.db)
+        item_names = {i["id"]: i["name"] for i in items}
+
+        # --- News signals ---
+        log.info("Fetching OSRS news signals…")
+        news_signals = fetch_news_signals(item_names, pages=3)
+
+        # --- GE market movers → signals ---
+        log.info("Fetching GE market movers…")
+        movers = get_market_movers()
+        name_to_id = {v.lower(): k for k, v in item_names.items()}
+        mover_signals = []
+
+        for entry in movers.get("rises", []):
+            item_id = name_to_id.get(entry["name"].lower())
+            if item_id:
+                mover_signals.append({
+                    "item_id":       item_id,
+                    "item_name":     entry["name"],
+                    "article_title": entry["change"],
+                    "article_url":   "",
+                    "article_date":  "",
+                    "signal_type":   "ge_rise",
+                })
+
+        all_signals = news_signals + mover_signals
+        replace_news_signals(self.db, all_signals)
+
+        summary = {"news": len(news_signals), "movers": len(mover_signals)}
+        log.info("News fetch complete: %s", summary)
+        return summary
 
     # ------------------------------------------------------------------
     # Background refresh
@@ -126,9 +172,8 @@ class DataService:
 def _save_timeseries(conn, item_id: int, rows: list[dict]):
     import time as _time
     now = int(_time.time())
-    db_rows = []
-    for r in rows:
-        db_rows.append((
+    db_rows = [
+        (
             item_id,
             r.get("timestamp") or now,
             r.get("avgHighPrice"),
@@ -136,7 +181,9 @@ def _save_timeseries(conn, item_id: int, rows: list[dict]):
             r.get("highPriceVolume"),
             r.get("lowPriceVolume"),
             "24h",
-        ))
+        )
+        for r in rows
+    ]
     conn.executemany(
         """
         INSERT OR IGNORE INTO price_snapshots
