@@ -110,6 +110,12 @@ def get_all_items(conn: sqlite3.Connection) -> list[dict]:
     return [dict(r) for r in cursor.fetchall()]
 
 
+def get_item_icon_urls(conn: sqlite3.Connection) -> dict:
+    """Return {item_id: icon_url} for all items that have an icon_url."""
+    cursor = conn.execute("SELECT id, icon_url FROM items WHERE icon_url IS NOT NULL")
+    return {r["id"]: r["icon_url"] for r in cursor.fetchall()}
+
+
 def get_item_ids_for_scoring(conn: sqlite3.Connection) -> list[int]:
     cursor = conn.execute(
         """

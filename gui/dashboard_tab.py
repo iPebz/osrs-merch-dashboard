@@ -2,6 +2,7 @@ import tkinter as tk
 import tkinter.ttk as ttk
 import customtkinter as ctk
 from gui.styles import score_color, trend_color, FONT_LABEL, FONT_TITLE
+from api.icon_cache import get_icon_photo
 import config
 
 TREE_COLS = [
@@ -59,6 +60,8 @@ class DashboardTab(ctk.CTkFrame):
         self._row_data: dict[str, dict] = {}
         self._sort_col = "score"
         self._sort_asc = False
+        self._icon_urls: dict[int, str] = {}
+        self._icon_photos: dict[int, object] = {}  # prevents GC
 
         _style_treeview()
         self._build_recommendations()
@@ -193,10 +196,14 @@ class DashboardTab(ctk.CTkFrame):
         self._tree = ttk.Treeview(
             container,
             columns=col_ids,
-            show="headings",
+            show="tree headings",
             style="Dashboard.Treeview",
             selectmode="browse",
         )
+
+        # Icon column (#0)
+        self._tree.heading("#0", text="")
+        self._tree.column("#0", width=36, minwidth=36, stretch=False, anchor="center")
 
         for col_id, label, width, anchor in TREE_COLS:
             stretch = (col_id == "reason")
@@ -274,6 +281,15 @@ class DashboardTab(ctk.CTkFrame):
             s30 = row.get("slope_30d", 0) or 0
             s90 = row.get("slope_90d", 0) or 0
             score = row.get("score", 0)
+            item_id = row.get("item_id", 0)
+
+            photo = self._icon_photos.get(item_id)
+            if photo is None:
+                icon_url = self._icon_urls.get(item_id)
+                if icon_url:
+                    photo = get_icon_photo(item_id, icon_url, 24)
+                    if photo:
+                        self._icon_photos[item_id] = photo
 
             name_text = ("★ " if has_news else "") + row.get("name", "")
             values = (
@@ -290,8 +306,12 @@ class DashboardTab(ctk.CTkFrame):
                 row.get("reason", ""),
             )
             tag = "news" if has_news else "normal"
-            iid = self._tree.insert("", "end", values=values, tags=(tag,))
+            iid = self._tree.insert("", "end", image=photo or "",
+                                    values=values, tags=(tag,))
             self._row_data[iid] = row
+
+    def set_icon_urls(self, icon_urls: dict[int, str]):
+        self._icon_urls = icon_urls
 
     def _on_tree_click(self, event):
         iid = self._tree.identify_row(event.y)

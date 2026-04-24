@@ -7,7 +7,7 @@ from analysis.opportunity_scorer import score_item
 from analysis.alert_engine import check_alerts
 from database.queries import (
     upsert_items, save_snapshots, get_item_ids_for_scoring,
-    get_snapshots, get_all_items,
+    get_snapshots, get_all_items, get_item_icon_urls,
     replace_news_signals, get_news_signals_for_items,
 )
 
@@ -150,6 +150,46 @@ class DataService:
         threading.Thread(target=self._background_bulk_24h, daemon=True).start()
         log.info("Background refresh started (every %ds).", interval_seconds)
 
+    def get_item_icon_urls(self) -> dict:
+        return get_item_icon_urls(self.db)
+
+    def prefetch_top_items_history(self, n: int = 200):
+        """Fetch full timeseries for top-N items (by volume), storing in DB."""
+        import config as _config
+        log.info("Prefetching timeseries for up to %d items…", n)
+
+        all_items = {i["id"]: i for i in get_all_items(self.db)}
+        news_by_item = get_news_signals_for_items(self.db)
+
+        # Priority: news items first, then HIGH_VALUE_SEEDS, then all
+        news_ids  = list(news_by_item.keys())
+        seed_ids  = list(_config.HIGH_VALUE_SEEDS.keys())
+        all_ids   = list(all_items.keys())
+
+        priority = []
+        seen: set = set()
+        for iid in news_ids + seed_ids + all_ids:
+            if iid not in seen:
+                priority.append(iid)
+                seen.add(iid)
+        priority = priority[:n]
+
+        fetched = 0
+        for item_id in priority:
+            cached = get_snapshots(self.db, item_id, interval="24h", limit=10)
+            if len(cached) >= 10:
+                continue
+            try:
+                item_limiter.wait()
+                ts = get_timeseries(item_id, timestep="24h")
+                if ts:
+                    _save_timeseries(self.db, item_id, ts)
+                    fetched += 1
+            except Exception as e:
+                log.debug("Prefetch failed for item %d: %s", item_id, e)
+
+        log.info("Prefetch complete — fetched %d items.", fetched)
+
     def _background_bulk_24h(self):
         try:
             wiki_limiter.wait()
@@ -158,6 +198,8 @@ class DataService:
             log.info("Background 24h bulk fetch complete (%d items).", len(bulk))
         except Exception as e:
             log.error("Background 24h fetch failed: %s", e)
+        threading.Thread(target=self.prefetch_top_items_history,
+                         args=(200,), daemon=True).start()
 
     def stop(self):
         self._running = False
