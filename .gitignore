@@ -1,0 +1,27 @@
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+venv/
+.venv/
+*.egg-info/
+dist/
+build/
+
+# Database (never commit price history)
+data/ge_prices.db
+data/*.db
+
+# Logs
+*.log
+
+# Secrets
+.env
+config/secrets.*
+credentials.txt
+
+# IDE
+.idea/
+.vscode/
+*.iml
