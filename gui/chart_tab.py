@@ -47,16 +47,16 @@ class ChartTab(ctk.CTkFrame):
     def _set_range(self, label: str):
         self._range = label
         if self._timeseries:
-            self._draw()
+            self._draw_chart()
 
     def load_item(self, item_id: int, item_name: str, timeseries: list[dict]):
         self._item_id   = item_id
         self._item_name = item_name
         self._timeseries = timeseries
         self._title_var.set(item_name)
-        self._draw()
+        self._draw_chart()
 
-    def _draw(self):
+    def _draw_chart(self):
         self._fig.clear()
 
         df = to_dataframe(self._timeseries)
