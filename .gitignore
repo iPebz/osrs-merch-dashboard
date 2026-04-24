@@ -1,27 +1,20 @@
+# Database files
+data/*.db
+data/*.sqlite
+
+# Python cache
 __pycache__/
-*.py[cod]
+*.pyc
 *.pyo
-*.pyd
-.Python
-venv/
-.venv/
+
+# Environment / secrets
+.env
+
+# Build artifacts
 *.egg-info/
 dist/
 build/
 
-# Database (never commit price history)
-data/ge_prices.db
-data/*.db
-
-# Logs
-*.log
-
-# Secrets
-.env
-config/secrets.*
-credentials.txt
-
-# IDE
-.idea/
-.vscode/
-*.iml
+# Virtual environments
+.venv/
+venv/
