@@ -115,7 +115,7 @@ def get_item_ids_for_scoring(conn: sqlite3.Connection) -> list[int]:
         """
         SELECT DISTINCT item_id FROM price_snapshots
         WHERE interval = '24h'
-        GROUP BY item_id HAVING COUNT(*) >= 14
+        GROUP BY item_id HAVING COUNT(*) >= 2
         """
     )
     return [r[0] for r in cursor.fetchall()]

@@ -63,22 +63,36 @@ class DataService:
         return ts
 
     def score_all_items(self) -> list[dict]:
-        item_ids  = get_item_ids_for_scoring(self.db)
-        all_items = {i["id"]: i for i in get_all_items(self.db)}
+        import config
+        item_ids     = get_item_ids_for_scoring(self.db)
+        all_items    = {i["id"]: i for i in get_all_items(self.db)}
         news_by_item = get_news_signals_for_items(self.db)
+        seeds        = set(config.HIGH_VALUE_SEEDS.keys())
 
         results = []
         for item_id in item_ids:
             item = all_items.get(item_id)
             if not item:
                 continue
+
             ts = get_snapshots(self.db, item_id, interval="24h", limit=365)
+
+            # Seed items with thin local history: fetch full timeseries from API
+            if item_id in seeds and len(ts) < 30:
+                try:
+                    fetched = self.get_timeseries_for_item(item_id)
+                    if fetched:
+                        ts = fetched
+                except Exception as e:
+                    log.warning("Timeseries fetch failed for %d: %s", item_id, e)
+
             if not ts:
                 continue
+
             item_signals = news_by_item.get(item_id, [])
-            score_dict = score_item(ts,
-                                    buy_limit=item.get("buy_limit") or 0,
-                                    news_signals=item_signals)
+            score_dict   = score_item(ts,
+                                      buy_limit=item.get("buy_limit") or 0,
+                                      news_signals=item_signals)
             if score_dict.get("score", 0) > 0:
                 score_dict["item_id"] = item_id
                 score_dict["name"]    = item["name"]

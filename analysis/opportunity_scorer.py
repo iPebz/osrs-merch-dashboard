@@ -14,7 +14,7 @@ NEWS_BOOST_MENTIONED   = 8
 
 def score_item(timeseries: list[dict], buy_limit: int,
                news_signals: list[dict] | None = None) -> dict:
-    if not timeseries or len(timeseries) < 14:
+    if not timeseries or len(timeseries) < 2:
         return {"score": 0, "reason": "Insufficient data"}
 
     df = to_dataframe(timeseries)
