@@ -1,26 +1,52 @@
+import tkinter as tk
+import tkinter.ttk as ttk
 import customtkinter as ctk
 from gui.styles import score_color, trend_color, FONT_LABEL, FONT_TITLE
 import config
 
-COLUMNS = [
-    ("Rank",        50),
-    ("Item",       200),
-    ("Score",       60),
-    ("Price (low)", 110),
-    ("Margin %",    80),
-    ("30d",         70),
-    ("90d",         70),
-    ("RSI",         55),
-    ("Volume",      80),
-    ("Buy Limit",   80),
-    ("Reason",     240),
+TREE_COLS = [
+    ("rank",      "Rank",        50,  "e"),
+    ("name",      "Item",       200,  "w"),
+    ("score",     "Score",       60,  "e"),
+    ("price",     "Price (low)", 110, "e"),
+    ("margin",    "Margin %",    80,  "e"),
+    ("slope30",   "30d",         70,  "e"),
+    ("slope90",   "90d",         70,  "e"),
+    ("rsi",       "RSI",         55,  "e"),
+    ("volume",    "Volume",      80,  "e"),
+    ("buylimit",  "Buy Limit",   80,  "e"),
+    ("reason",    "Reason",     240,  "w"),
 ]
 
-ROW_BG      = "#1a1a2e"
-ROW_ALT_BG  = "#16213e"
-ROW_NEWS_BG = "#0a2a0a"
-CARD_BG     = "#16213e"
-CARD_NEWS_BG = "#0a2a0a"
+CARD_BG      = "#16213e"
+CARD_NEWS_BG = "#163016"
+
+
+def _style_treeview():
+    style = ttk.Style()
+    style.theme_use("clam")
+    style.configure("Dashboard.Treeview",
+        background="#1a1a2e",
+        foreground="white",
+        fieldbackground="#1a1a2e",
+        rowheight=30,
+        font=FONT_LABEL,
+        borderwidth=0,
+    )
+    style.configure("Dashboard.Treeview.Heading",
+        background="#0d1b2a",
+        foreground="#f39c12",
+        font=FONT_TITLE,
+        relief="flat",
+        borderwidth=1,
+    )
+    style.map("Dashboard.Treeview",
+        background=[("selected", "#0f3460")],
+        foreground=[("selected", "white")],
+    )
+    style.map("Dashboard.Treeview.Heading",
+        background=[("active", "#16213e")],
+    )
 
 
 class DashboardTab(ctk.CTkFrame):
@@ -30,34 +56,37 @@ class DashboardTab(ctk.CTkFrame):
         self.data_service = data_service
         self.on_chart_select = on_chart_select
         self._rows: list[dict] = []
-        self._sort_col = "Score"
+        self._row_data: dict[str, dict] = {}
+        self._sort_col = "score"
         self._sort_asc = False
 
+        _style_treeview()
         self._build_recommendations()
         self._build_controls()
         self._build_table()
 
     # ------------------------------------------------------------------
-    # Recommendations panel
+    # TOP PICKS panel (using plain tk widgets for reliable rendering)
     # ------------------------------------------------------------------
 
     def _build_recommendations(self):
-        outer = ctk.CTkFrame(self, fg_color="#0d1b2a", corner_radius=8)
-        outer.pack(fill="x", padx=6, pady=(6, 2))
+        self._rec_outer = tk.Frame(self, bg="#0d1b2a", relief="flat")
+        self._rec_outer.pack(fill="x", padx=6, pady=(6, 2))
 
-        ctk.CTkLabel(
-            outer, text="TOP PICKS", font=FONT_TITLE,
-            text_color="#f39c12", fg_color="#0d1b2a",
-        ).pack(side="left", padx=(10, 6), pady=6)
+        tk.Label(
+            self._rec_outer, text="TOP PICKS",
+            font=FONT_TITLE, fg="#f39c12", bg="#0d1b2a",
+        ).pack(side="left", padx=(10, 6), pady=8)
 
-        self._rec_cards_frame = ctk.CTkFrame(outer, fg_color="#0d1b2a")
+        self._rec_cards_frame = tk.Frame(self._rec_outer, bg="#0d1b2a")
         self._rec_cards_frame.pack(side="left", fill="x", expand=True, pady=4)
 
-        ctk.CTkLabel(
+        self._rec_placeholder = tk.Label(
             self._rec_cards_frame,
             text='Press "Score All Items" to generate recommendations.',
-            font=FONT_LABEL, text_color="#555555", fg_color="#0d1b2a",
-        ).pack(side="left", padx=8)
+            font=FONT_LABEL, fg="#555555", bg="#0d1b2a",
+        )
+        self._rec_placeholder.pack(side="left", padx=8)
 
     def _update_recommendations(self, scored_items: list[dict]):
         for w in self._rec_cards_frame.winfo_children():
@@ -65,10 +94,10 @@ class DashboardTab(ctk.CTkFrame):
 
         top = [r for r in scored_items if r.get("score", 0) >= 50][:5]
         if not top:
-            ctk.CTkLabel(
+            tk.Label(
                 self._rec_cards_frame,
-                text="No items above score 50 yet.",
-                font=FONT_LABEL, text_color="#555555", fg_color="#0d1b2a",
+                text="No items scored above 50 yet.",
+                font=FONT_LABEL, fg="#555555", bg="#0d1b2a",
             ).pack(side="left", padx=8)
             return
 
@@ -79,52 +108,47 @@ class DashboardTab(ctk.CTkFrame):
         has_news = bool(item.get("news_signals"))
         bg = CARD_NEWS_BG if has_news else CARD_BG
 
-        card = ctk.CTkFrame(
-            self._rec_cards_frame,
-            fg_color=bg, corner_radius=8, width=190, height=100,
+        card = tk.Frame(
+            self._rec_cards_frame, bg=bg,
+            relief="solid", bd=1, width=190, height=105,
         )
         card.pack(side="left", padx=4, pady=2)
         card.pack_propagate(False)
 
-        # Name row
-        name_row = ctk.CTkFrame(card, fg_color=bg)
-        name_row.pack(fill="x", padx=6, pady=(5, 0))
+        # Name + optional NEWS badge
+        top_row = tk.Frame(card, bg=bg)
+        top_row.pack(fill="x", padx=6, pady=(5, 0))
 
-        ctk.CTkLabel(
-            name_row, text=item.get("name", "")[:20],
-            font=FONT_LABEL, text_color="white", fg_color=bg, anchor="w",
+        tk.Label(
+            top_row, text=item.get("name", "")[:22],
+            font=FONT_LABEL, fg="white", bg=bg, anchor="w",
         ).pack(side="left")
 
         if has_news:
-            ctk.CTkLabel(
-                name_row, text=" NEWS ",
-                font=FONT_LABEL, text_color="#2ecc71", fg_color="#0a3a0a",
-                corner_radius=4,
+            tk.Label(
+                top_row, text=" NEWS ",
+                font=FONT_LABEL, fg="#2ecc71", bg="#0a3010",
             ).pack(side="right")
 
-        # Score
         score = item.get("score", 0)
-        ctk.CTkLabel(
+        tk.Label(
             card, text=f"Score: {score:.0f}",
-            font=FONT_TITLE, text_color=score_color(score), fg_color=bg,
+            font=FONT_TITLE, fg=score_color(score), bg=bg, anchor="w",
         ).pack(padx=6, anchor="w")
 
-        # Price
         price = item.get("current_low", 0)
         price_str = f"{price/1e6:.2f}M" if price >= 1e6 else f"{price/1e3:.0f}k"
-        ctk.CTkLabel(
+        tk.Label(
             card, text=price_str,
-            font=FONT_LABEL, text_color="#aaaaaa", fg_color=bg,
+            font=FONT_LABEL, fg="#aaaaaa", bg=bg, anchor="w",
         ).pack(padx=6, anchor="w")
 
-        # Reason
-        ctk.CTkLabel(
-            card, text=item.get("reason", "")[:40],
-            font=FONT_LABEL, text_color="#888888", fg_color=bg,
-            wraplength=175, anchor="w",
+        tk.Label(
+            card, text=item.get("reason", "")[:42],
+            font=FONT_LABEL, fg="#888888", bg=bg,
+            anchor="w", wraplength=175, justify="left",
         ).pack(padx=6, pady=(0, 4), anchor="w")
 
-        # Bind click to all widgets in card recursively
         _bind_click(card, lambda _, r=item: self._on_row_click(r))
 
     # ------------------------------------------------------------------
@@ -133,7 +157,7 @@ class DashboardTab(ctk.CTkFrame):
 
     def _build_controls(self):
         ctrl = ctk.CTkFrame(self)
-        ctrl.pack(fill="x", padx=6, pady=4)
+        ctrl.pack(fill="x", padx=6, pady=(4, 2))
 
         ctk.CTkLabel(ctrl, text="Min Score:", font=FONT_LABEL).pack(side="left", padx=(4, 2))
         self._score_var = ctk.IntVar(value=config.DEFAULT_SCORE_THRESHOLD)
@@ -158,27 +182,52 @@ class DashboardTab(ctk.CTkFrame):
                       command=self._apply_filters).pack(side="left", padx=6)
 
     # ------------------------------------------------------------------
-    # Table
+    # Table (ttk.Treeview — reliable text rendering on all Windows configs)
     # ------------------------------------------------------------------
 
     def _build_table(self):
-        header = ctk.CTkFrame(self)
-        header.pack(fill="x", padx=6)
-        for col, width in COLUMNS:
-            ctk.CTkButton(
-                header, text=col, width=width, height=26,
-                font=FONT_TITLE,
-                command=lambda c=col: self._sort_by(c),
-            ).pack(side="left", padx=1)
+        container = tk.Frame(self, bg="#1a1a2e")
+        container.pack(fill="both", expand=True, padx=6, pady=(2, 6))
 
-        self._scroll = ctk.CTkScrollableFrame(self)
-        self._scroll.pack(fill="both", expand=True, padx=6, pady=4)
+        col_ids = [c[0] for c in TREE_COLS]
+        self._tree = ttk.Treeview(
+            container,
+            columns=col_ids,
+            show="headings",
+            style="Dashboard.Treeview",
+            selectmode="browse",
+        )
 
-    def _sort_by(self, col: str):
-        if self._sort_col == col:
+        for col_id, label, width, anchor in TREE_COLS:
+            stretch = (col_id == "reason")
+            self._tree.heading(col_id, text=label,
+                               command=lambda c=col_id: self._sort_by(c))
+            self._tree.column(col_id, width=width, anchor=anchor,
+                              minwidth=20, stretch=stretch)
+
+        self._tree.tag_configure("news",
+            background="#0f2a10", foreground="#2ecc71")
+        self._tree.tag_configure("normal",
+            background="#1a1a2e", foreground="white")
+
+        scrollbar = ttk.Scrollbar(container, orient="vertical",
+                                  command=self._tree.yview)
+        self._tree.configure(yscrollcommand=scrollbar.set)
+
+        self._tree.pack(side="left", fill="both", expand=True)
+        scrollbar.pack(side="right", fill="y")
+
+        self._tree.bind("<ButtonRelease-1>", self._on_tree_click)
+
+    # ------------------------------------------------------------------
+    # Sorting / filtering
+    # ------------------------------------------------------------------
+
+    def _sort_by(self, col_id: str):
+        if self._sort_col == col_id:
             self._sort_asc = not self._sort_asc
         else:
-            self._sort_col = col
+            self._sort_col = col_id
             self._sort_asc = False
         self._render_rows(self._filtered_rows())
 
@@ -202,71 +251,52 @@ class DashboardTab(ctk.CTkFrame):
         ]
 
         key_map = {
-            "Rank": None, "Item": "name", "Score": "score",
-            "Price (low)": "current_low", "Margin %": "margin_pct",
-            "30d": "slope_30d", "90d": "slope_90d", "RSI": "rsi",
-            "Volume": "avg_daily_vol", "Buy Limit": "buy_limit",
+            "rank": None, "name": "name", "score": "score",
+            "price": "current_low", "margin": "margin_pct",
+            "slope30": "slope_30d", "slope90": "slope_90d",
+            "rsi": "rsi", "volume": "avg_daily_vol", "buylimit": "buy_limit",
         }
         key = key_map.get(self._sort_col)
         if key:
             out.sort(key=lambda r: r.get(key, 0) or 0, reverse=not self._sort_asc)
         return out
 
+    # ------------------------------------------------------------------
+    # Rendering
+    # ------------------------------------------------------------------
+
     def _render_rows(self, rows: list[dict]):
-        for widget in self._scroll.winfo_children():
-            widget.destroy()
+        self._tree.delete(*self._tree.get_children())
+        self._row_data.clear()
+
         for rank, row in enumerate(rows, 1):
-            self._add_row(rank, row)
+            has_news = bool(row.get("news_signals"))
+            s30 = row.get("slope_30d", 0) or 0
+            s90 = row.get("slope_90d", 0) or 0
+            score = row.get("score", 0)
 
-    def _add_row(self, rank: int, row: dict):
-        has_news = bool(row.get("news_signals"))
-        bg = ROW_NEWS_BG if has_news else ROW_BG
-
-        frame = ctk.CTkFrame(self._scroll, height=32, fg_color=bg)
-        frame.pack(fill="x", pady=1)
-        frame.pack_propagate(False)
-
-        score = row.get("score", 0)
-        s30   = row.get("slope_30d", 0) or 0
-        s90   = row.get("slope_90d", 0) or 0
-
-        def cell(text, width, fg=None):
-            lbl = ctk.CTkLabel(
-                frame, text=str(text), width=width,
-                font=FONT_LABEL,
-                text_color=fg if fg else "white",
-                fg_color=bg,
-                anchor="e",
+            name_text = ("★ " if has_news else "") + row.get("name", "")
+            values = (
+                rank,
+                name_text,
+                f"{score:.0f}",
+                f"{row.get('current_low', 0):,.0f}",
+                f"{row.get('margin_pct', 0):.1f}%",
+                f"{s30:+.2f}%",
+                f"{s90:+.2f}%",
+                f"{row.get('rsi', 50):.0f}",
+                f"{row.get('avg_daily_vol', 0):,.0f}",
+                str(row.get("buy_limit", "?")),
+                row.get("reason", ""),
             )
-            lbl.pack(side="left", padx=1)
-            return lbl
+            tag = "news" if has_news else "normal"
+            iid = self._tree.insert("", "end", values=values, tags=(tag,))
+            self._row_data[iid] = row
 
-        cell(rank,                               COLUMNS[0][1])
-
-        name_lbl = ctk.CTkLabel(
-            frame, text=row.get("name", ""),
-            width=COLUMNS[1][1], font=FONT_LABEL,
-            text_color="white", fg_color=bg, anchor="w",
-        )
-        name_lbl.pack(side="left", padx=1)
-        name_lbl.bind("<Button-1>", lambda _, r=row: self._on_row_click(r))
-
-        cell(f"{score:.0f}",                     COLUMNS[2][1], fg=score_color(score))
-        cell(f"{row.get('current_low',0):,.0f}", COLUMNS[3][1])
-        cell(f"{row.get('margin_pct',0):.1f}%",  COLUMNS[4][1])
-        cell(f"{s30:+.2f}%",                     COLUMNS[5][1], fg=trend_color(s30))
-        cell(f"{s90:+.2f}%",                     COLUMNS[6][1], fg=trend_color(s90))
-        cell(f"{row.get('rsi',50):.0f}",         COLUMNS[7][1])
-        cell(f"{row.get('avg_daily_vol',0):,.0f}", COLUMNS[8][1])
-        cell(row.get("buy_limit", "?"),          COLUMNS[9][1])
-
-        reason_text = ("* " if has_news else "") + row.get("reason", "")
-        ctk.CTkLabel(
-            frame, text=reason_text,
-            width=COLUMNS[10][1], font=FONT_LABEL, anchor="w",
-            text_color="#2ecc71" if has_news else "#aaaaaa",
-            fg_color=bg,
-        ).pack(side="left", padx=2)
+    def _on_tree_click(self, event):
+        iid = self._tree.identify_row(event.y)
+        if iid and iid in self._row_data:
+            self._on_row_click(self._row_data[iid])
 
     def _on_row_click(self, row: dict):
         if self.on_chart_select:
@@ -286,7 +316,6 @@ class DashboardTab(ctk.CTkFrame):
 
 
 def _bind_click(widget, handler):
-    """Recursively bind a click handler to a widget and all its children."""
     widget.bind("<Button-1>", handler)
     for child in widget.winfo_children():
         _bind_click(child, handler)
