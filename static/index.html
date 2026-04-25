@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>OSRS GE Merching Dashboard</title>
+  <link rel="stylesheet" href="/static/style.css">
+  <!-- Plotly for interactive charts (zoom, pan, hover built-in) -->
+  <script src="https://cdn.plot.ly/plotly-2.26.0.min.js"></script>
+</head>
+<body>
+
+<!-- ══════════════ HEADER ══════════════ -->
+<header>
+  <div class="header-left">
+    <h1>OSRS GE Dashboard</h1>
+  </div>
+  <div class="header-actions">
+    <button class="btn-primary" onclick="App.triggerScore()">Score All Items</button>
+    <button class="btn-secondary" onclick="App.triggerRefresh()">Refresh Prices</button>
+    <button class="btn-news" onclick="App.triggerNews()">Fetch News</button>
+  </div>
+  <div class="status-bar">
+    <span id="status-dot" class="dot idle"></span>
+    <span id="status-text">Loading…</span>
+  </div>
+</header>
+
+<!-- ══════════════ TABS ══════════════ -->
+<nav class="tab-nav">
+  <button class="tab-btn active" data-tab="dashboard">Dashboard</button>
+  <button class="tab-btn" data-tab="charts">Charts</button>
+  <button class="tab-btn" data-tab="watchlist">Watchlist</button>
+  <button class="tab-btn" data-tab="recommendations">Recommendations</button>
+</nav>
+
+<!-- ══════════════ DASHBOARD ══════════════ -->
+<div id="tab-dashboard" class="tab-content active">
+
+  <!-- Top picks strip -->
+  <div class="top-picks-bar">
+    <span class="top-picks-label">TOP PICKS</span>
+    <div id="top-picks-cards"></div>
+  </div>
+
+  <!-- Filters -->
+  <div class="filters">
+    <label>
+      Min Score <span id="score-val">0</span>
+      <input type="range" id="f-score" min="0" max="100" value="0">
+    </label>
+    <label>
+      Search
+      <input type="text" id="f-search" placeholder="item name…">
+    </label>
+    <label>
+      Max Price
+      <input type="text" id="f-price" value="2000M" style="width:80px">
+    </label>
+    <label>
+      Strategy
+      <select id="f-strat">
+        <option value="">All</option>
+        <option>FLIP</option>
+        <option>MERCH</option>
+        <option>TREND</option>
+        <option>NEWS</option>
+      </select>
+    </label>
+    <button class="btn-sm" onclick="Dashboard.applyFilters()">Apply</button>
+  </div>
+
+  <!-- Table -->
+  <div class="table-wrapper">
+    <table id="items-table">
+      <thead>
+        <tr>
+          <th data-col="rank"                data-tip="Rank by score">#</th>
+          <th data-col="name"                data-tip="Item name">Item</th>
+          <th data-col="strategy"            data-tip="FLIP: buy/sell spread · MERCH: buy the dip · TREND: ride momentum · NEWS: game update catalyst">Strat</th>
+          <th data-col="score"               data-tip="Overall opportunity score 0–100. Base is 50; factors add or subtract.">Score</th>
+          <th data-col="current_low"         data-tip="Current GE buy price (lowest sell offer on the exchange)">Price</th>
+          <th data-col="net_margin_pct"      data-tip="Net margin after 1% GE tax on the buy/sell spread">Margin%</th>
+          <th data-col="daily_flip_profit"   data-tip="Estimated daily profit flipping at the full 4h buy limit">GP/day</th>
+          <th data-col="slope_7d"            data-tip="Price slope over 7 days — positive means rising, negative means falling">7d</th>
+          <th data-col="slope_90d"           data-tip="Price slope over 90 days — positive = long-term uptrend, negative = downtrend">90d</th>
+          <th data-col="rsi"                 data-tip="Relative Strength Index (14-period). Below 35 = oversold (buy signal). Above 65 = overbought (sell signal).">RSI</th>
+          <th data-col="avg_daily_vol"       data-tip="Average daily trade volume over the last 30 days">Volume</th>
+          <th class="col-why"               data-tip="Open score breakdown showing each contributing factor">Info</th>
+        </tr>
+      </thead>
+      <tbody id="items-tbody">
+        <tr><td colspan="12" class="placeholder">Press "Score All Items" to load data.</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- ══════════════ CHARTS ══════════════ -->
+<div id="tab-charts" class="tab-content hidden">
+  <div class="chart-controls">
+    <div class="autocomplete-wrap" id="chart-ac-wrap">
+      <input type="text" id="chart-search" placeholder="Search item to chart…" autocomplete="off">
+      <div id="chart-dropdown" class="ac-dropdown hidden"></div>
+    </div>
+    <div class="range-btns">
+      <button class="btn-range" data-days="1">1d</button>
+      <button class="btn-range active" data-days="30">30d</button>
+      <button class="btn-range" data-days="90">90d</button>
+      <button class="btn-range" data-days="180">180d</button>
+      <button class="btn-range" data-days="0">All</button>
+    </div>
+    <span id="chart-item-name" class="chart-title"></span>
+  </div>
+  <div id="chart-stats" class="hidden"></div>
+  <div id="chart-container">
+    <div class="placeholder" style="padding:80px 0; text-align:center; color:#555">
+      Search for an item above, or click a row in the Dashboard.
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════ WATCHLIST ══════════════ -->
+<div id="tab-watchlist" class="tab-content hidden">
+  <div class="wl-add-panel">
+    <span class="panel-title">Add to Watchlist</span>
+
+    <div class="autocomplete-wrap" id="wl-ac-wrap">
+      <input type="text" id="wl-search" placeholder="Search item…" autocomplete="off">
+      <div id="wl-dropdown" class="ac-dropdown hidden"></div>
+    </div>
+
+    <label class="inline-label">
+      Buy@
+      <input type="text" id="wl-buy" placeholder="optional" style="width:90px">
+    </label>
+    <label class="inline-label">
+      Qty
+      <input type="text" id="wl-qty" placeholder="optional" style="width:70px">
+    </label>
+
+    <button class="btn-sm btn-primary" onclick="Watchlist.addWatch()">+ Watch</button>
+    <button class="btn-sm btn-green" onclick="Watchlist.addPosition()">+ Position</button>
+    <span id="wl-status" class="dim-text"></span>
+  </div>
+
+  <div id="wl-summary" class="hidden"></div>
+
+  <div class="table-wrapper">
+    <table id="wl-table">
+      <thead>
+        <tr>
+          <th data-col="name">Item</th>
+          <th data-col="strategy">Strat</th>
+          <th data-col="score">Score</th>
+          <th data-col="current_low">Price</th>
+          <th data-col="net_margin_pct">Margin%</th>
+          <th data-col="daily_flip_profit">GP/day</th>
+          <th data-col="slope_7d">7d</th>
+          <th data-col="slope_90d">90d</th>
+          <th data-col="rsi">RSI</th>
+          <th data-col="avg_daily_vol">Volume</th>
+          <th data-col="buy_price">Buy@</th>
+          <th data-col="quantity">Qty</th>
+          <th data-col="pnl_gp">P&amp;L (gp)</th>
+          <th data-col="pnl_pct">P&amp;L%</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody id="wl-tbody">
+        <tr><td colspan="15" class="placeholder">Add items to start tracking.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- Edit / action row — shown on row select -->
+  <div id="wl-action-bar" class="wl-action-bar hidden">
+    <span id="wl-sel-name" class="dim-text"></span>
+    <label class="inline-label">Buy@ <input type="text" id="wl-edit-buy" style="width:90px"></label>
+    <label class="inline-label">Qty  <input type="text" id="wl-edit-qty" style="width:70px"></label>
+    <button class="btn-sm btn-primary" onclick="Watchlist.updateSelected()">Update</button>
+    <button class="btn-sm btn-danger"  onclick="Watchlist.removeSelected()">Remove</button>
+    <button class="btn-sm btn-green"   onclick="Watchlist.chartSelected()">▶ Chart</button>
+  </div>
+</div>
+
+<!-- ══════════════ RECOMMENDATIONS ══════════════ -->
+<div id="tab-recommendations" class="tab-content hidden">
+  <div class="rec-header">
+    <h2>Recommendations</h2>
+    <div class="toggle-btns">
+      <button class="toggle-btn active" data-view="strategy" onclick="Recs.switchView('strategy')">By Strategy</button>
+      <button class="toggle-btn"        data-view="price"    onclick="Recs.switchView('price')">By Price Range</button>
+    </div>
+    <span id="rec-count" class="dim-text"></span>
+  </div>
+  <div id="rec-sections"></div>
+</div>
+
+<!-- ══════════════ SCORE REASON MODAL ══════════════ -->
+<div id="reason-modal" class="modal-overlay hidden" onclick="closeReasonModal(event)">
+  <div class="modal-box">
+    <div class="modal-header">
+      <span id="modal-item-name"></span>
+      <button class="modal-close" onclick="closeReason()">✕</button>
+    </div>
+    <p id="modal-score-line" class="modal-score-line"></p>
+    <div id="modal-factors"></div>
+  </div>
+</div>
+
+<script src="/static/app.js"></script>
+</body>
+</html>

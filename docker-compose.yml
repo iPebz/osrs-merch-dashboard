@@ -1,0 +1,23 @@
+services:
+  dashboard:
+    build: .
+    image: osrs-merch-dashboard
+    container_name: osrs-dashboard
+    ports:
+      - "8000:8000"        # host_port:container_port
+    volumes:
+      - osrs-data:/app/data  # persists DB + icon cache across restarts
+    environment:
+      - BIND_HOST=0.0.0.0
+      - PORT=8000
+    restart: unless-stopped  # auto-restarts on crash or after Docker Desktop reboot
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/status')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+
+volumes:
+  osrs-data:
+    driver: local

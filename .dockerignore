@@ -1,0 +1,22 @@
+venv/
+.git/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# data is a runtime volume — never bake DB or icons into the image
+data/
+
+# logs
+*.log
+
+# GUI-only code — not imported by the web server
+gui/
+
+# dev / CI artifacts
+.pytest_cache/
+.mypy_cache/
+*.egg-info/
+dist/
+build/

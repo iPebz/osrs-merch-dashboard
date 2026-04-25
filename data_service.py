@@ -4,7 +4,6 @@ import time
 from api.wiki_api import get_mapping, get_latest, get_bulk, get_timeseries
 from api.rate_limiter import wiki_limiter, item_limiter
 from analysis.opportunity_scorer import score_item
-from analysis.alert_engine import check_alerts
 from database.queries import (
     upsert_items, save_snapshots, get_item_ids_for_scoring,
     get_snapshots, get_all_snapshots_batch, get_all_items, get_item_icon_urls,
@@ -134,7 +133,6 @@ class DataService:
         wiki_limiter.wait()
         latest = get_latest()
         save_snapshots(self.db, latest, interval="latest")
-        check_alerts(self.db, latest)
 
     def start_background_refresh(self, interval_seconds: int = 90):
         self._running = True
@@ -150,6 +148,16 @@ class DataService:
 
     def get_item_icon_urls(self) -> dict:
         return get_item_icon_urls(self.db)
+
+    def get_intraday_for_item(self, item_id: int) -> dict:
+        """Fetch 5-minute timeseries for intraday chart (last ~24 h)."""
+        item_limiter.wait()
+        ts = get_timeseries(item_id, timestep="5m")
+        if ts:
+            cutoff = ts[-1].get("timestamp", 0) - 86_400
+            ts = [r for r in ts if r.get("timestamp", 0) >= cutoff]
+        latest = ts[-1] if ts else {}
+        return {"timeseries": ts or [], "latest": latest}
 
     def prefetch_top_items_history(self, n: int = 200):
         """Fetch full timeseries for top-N items (by volume), storing in DB."""

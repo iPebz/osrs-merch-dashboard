@@ -14,6 +14,9 @@ NEWS_LOOKBACK_DAYS = 30
 FULL_BODY_CATEGORIES = {"Game Updates"}
 # Minimum item name length to attempt matching (avoids common short words)
 MIN_NAME_LEN = 5
+# Leagues is a temporary seasonal game mode — its updates affect a separate
+# economy and should not influence main-game GE scoring.
+_LEAGUES_SKIP_WORDS = {"league", "leagues"}
 
 
 def fetch_news_signals(item_names: dict, pages: int = 3) -> list[dict]:
@@ -42,6 +45,10 @@ def fetch_news_signals(item_names: dict, pages: int = 3) -> list[dict]:
     for article in articles:
         date_parsed = article.get("date_parsed")
         if date_parsed and date_parsed < cutoff:
+            continue
+
+        title_lower = article.get("title", "").lower()
+        if any(w in title_lower for w in _LEAGUES_SKIP_WORDS):
             continue
 
         category = article.get("category", "")

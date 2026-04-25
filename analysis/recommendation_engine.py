@@ -27,8 +27,8 @@ STRATEGY_DESC = {
     "NEWS":  "Game update or market signal detected — demand catalyst present",
 }
 
-TOP_N_PRICE  = 3
-TOP_N_STRAT  = 5
+TOP_N_PRICE  = 25
+TOP_N_STRAT  = 25
 
 
 def group_by_price_range(scored_items: list[dict]) -> dict[str, list[dict]]:
@@ -183,6 +183,13 @@ def build_detail(item: dict) -> str:
             "  Strategy: buy before market fully prices in the news,",
             f"  target {_fmt_gp(int(res))} or +20% within 1–3 days",
         ]
+
+    # Score breakdown — surface the inline reason produced by the scorer
+    reason = item.get("reason", "")
+    if reason and reason != "Neutral signals":
+        lines += ["", "SCORE BREAKDOWN  (base 50)"]
+        for factor in reason.split(" · "):
+            lines.append(f"  • {factor}")
 
     lines += [
         "",

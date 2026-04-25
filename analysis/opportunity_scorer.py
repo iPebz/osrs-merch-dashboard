@@ -32,9 +32,23 @@ NEWS_BOOST_MENTIONED   = 8
 
 MIN_VOLUME = 50  # items trading fewer than this per day are unscoreable
 
+# Leagues is a temporary seasonal game mode that runs on SEPARATE servers with
+# a completely independent economy.  Leagues players cannot access the main-game
+# Grand Exchange, so game-update articles about Leagues have no bearing on
+# main-game GE prices.  Filter them out before any news-signal processing.
+_LEAGUES_TERMS = frozenset({"league", "leagues"})
+
 
 def score_item(timeseries: list[dict], buy_limit: int,
                news_signals: list[dict] | None = None) -> dict:
+
+    # Strip Leagues signals before any scoring.  Leagues runs on separate servers
+    # with its own economy — its update articles must not influence main-GE scores.
+    if news_signals:
+        news_signals = [
+            s for s in news_signals
+            if not any(t in s.get("article_title", "").lower() for t in _LEAGUES_TERMS)
+        ]
 
     if not timeseries or len(timeseries) < 2:
         return {"score": 0, "reason": "Insufficient data"}
@@ -93,69 +107,141 @@ def score_item(timeseries: list[dict], buy_limit: int,
     if ma_deviation < -70:
         return {"score": 0, "reason": "Extreme price collapse — likely stale data"}
 
-    # ── Score (base 50) ────────────────────────────────────────────────
+    # ── Score (base 50) + reason accumulation ─────────────────────────
     score = 50.0
+    reason_parts = []
 
     # Multi-timeframe agreement (strongest signal)
-    if mtf_score == 3:    score += 18   # all 3 timeframes bullish
-    elif mtf_score == 2:  score += 10
-    elif mtf_score == 1:  score += 4
-    elif mtf_score == -2: score -= 12
-    elif mtf_score == -3: score -= 20
+    if mtf_score == 3:
+        score += 18
+        reason_parts.append("all 3 timeframes bullish (+18)")
+    elif mtf_score == 2:
+        score += 10
+        reason_parts.append("2 of 3 timeframes bullish (+10)")
+    elif mtf_score == 1:
+        score += 4
+        reason_parts.append("1 timeframe bullish (+4)")
+    elif mtf_score == -2:
+        score -= 12
+        reason_parts.append("2 timeframes bearish (−12)")
+    elif mtf_score == -3:
+        score -= 20
+        reason_parts.append("all 3 timeframes bearish (−20)")
 
     # Slope refinement (90d is most reliable for merching)
-    if slope_90d > 0.2:   score += 6
-    elif slope_90d < -0.3: score -= 8
+    if slope_90d > 0.2:
+        score += 6
+        reason_parts.append(f"strong 90d uptrend (+6)")
+    elif slope_90d < -0.3:
+        score -= 8
+        reason_parts.append(f"90d downtrend (−8)")
 
     # RSI — oversold gives the best entries
-    if item_rsi < 25:     score += 22
-    elif item_rsi < 35:   score += 14
-    elif item_rsi < 45:   score += 7
-    elif item_rsi > 75:   score -= 14
-    elif item_rsi > 65:   score -= 6
+    if item_rsi < 25:
+        score += 22
+        reason_parts.append(f"RSI {item_rsi:.0f} deeply oversold (+22)")
+    elif item_rsi < 35:
+        score += 14
+        reason_parts.append(f"RSI {item_rsi:.0f} oversold (+14)")
+    elif item_rsi < 45:
+        score += 7
+        reason_parts.append(f"RSI {item_rsi:.0f} near oversold (+7)")
+    elif item_rsi > 75:
+        score -= 14
+        reason_parts.append(f"RSI {item_rsi:.0f} overbought (−14)")
+    elif item_rsi > 65:
+        score -= 6
+        reason_parts.append(f"RSI {item_rsi:.0f} elevated (−6)")
 
     # Price dip relative to MA90 (deeper dip = bigger opportunity)
     if is_dip:
-        if ma_deviation < -25:  score += 20   # very deep dip
-        elif ma_deviation < -15: score += 13
-        elif ma_deviation < -8:  score += 7
-        else:                    score += 4
+        if ma_deviation < -25:
+            score += 20
+            reason_parts.append(f"{abs(ma_deviation):.0f}% below 90d avg — very deep dip (+20)")
+        elif ma_deviation < -15:
+            score += 13
+            reason_parts.append(f"{abs(ma_deviation):.0f}% below 90d avg — dip (+13)")
+        elif ma_deviation < -8:
+            score += 7
+            reason_parts.append(f"{abs(ma_deviation):.0f}% below 90d avg — mild dip (+7)")
+        else:
+            score += 4
+            reason_parts.append(f"{abs(ma_deviation):.0f}% below 90d avg (+4)")
 
     # GE-tax-adjusted margin quality
-    if net_margin_pct > 8:    score += 15
-    elif net_margin_pct > 5:  score += 10
-    elif net_margin_pct > 3:  score += 6
-    elif net_margin_pct > 1:  score += 2
-    elif net_margin_pct < 0:  score -= 8
+    if net_margin_pct > 8:
+        score += 15
+        reason_parts.append(f"{net_margin_pct:.1f}% net margin (+15)")
+    elif net_margin_pct > 5:
+        score += 10
+        reason_parts.append(f"{net_margin_pct:.1f}% net margin (+10)")
+    elif net_margin_pct > 3:
+        score += 6
+        reason_parts.append(f"{net_margin_pct:.1f}% net margin (+6)")
+    elif net_margin_pct > 1:
+        score += 2
+        reason_parts.append(f"{net_margin_pct:.1f}% net margin (+2)")
+    elif net_margin_pct < 0:
+        score -= 8
+        reason_parts.append(f"{net_margin_pct:.1f}% net margin (−8)")
 
     # Liquidity — can we actually fill a buy order?
-    if liq > 10:   score += 8
-    elif liq > 3:  score += 4
-    elif liq < 0.5: score -= 10
-    elif liq < 0.2: score -= 20
+    # Note: check stricter threshold first to avoid dead-code ordering.
+    if liq > 10:
+        score += 8
+        reason_parts.append(f"high liquidity {liq:.1f}× buy-limit/day (+8)")
+    elif liq > 3:
+        score += 4
+        reason_parts.append(f"good liquidity {liq:.1f}× buy-limit/day (+4)")
+    elif liq < 0.2:
+        score -= 20
+        reason_parts.append(f"very low liquidity {liq:.2f}× (−20)")
+    elif liq < 0.5:
+        score -= 10
+        reason_parts.append(f"low liquidity {liq:.2f}× (−10)")
 
     # Volume trend
-    if vol_t == "RISING":    score += 5
-    elif vol_t == "FALLING": score -= 6
+    if vol_t == "RISING":
+        score += 5
+        reason_parts.append("volume trending up (+5)")
+    elif vol_t == "FALLING":
+        score -= 6
+        reason_parts.append("volume trending down (−6)")
 
     # Upside to resistance (merch potential)
-    if upside_to_res > 20:  score += 8
-    elif upside_to_res > 10: score += 4
+    if upside_to_res > 20:
+        score += 8
+        reason_parts.append(f"{upside_to_res:.0f}% upside to resistance (+8)")
+    elif upside_to_res > 10:
+        score += 4
+        reason_parts.append(f"{upside_to_res:.0f}% upside to resistance (+4)")
 
     # Momentum (short-term acceleration)
-    if momentum > 0.3:    score += 5
-    elif momentum < -0.3:  score -= 5
+    if momentum > 0.3:
+        score += 5
+        reason_parts.append("short-term momentum (+5)")
+    elif momentum < -0.3:
+        score -= 5
+        reason_parts.append("short-term decline (−5)")
 
     # ── News / market signal boost ─────────────────────────────────────
     news_boost, news_label = _calc_news_boost(news_signals)
-    score += news_boost
+    if news_boost > 0:
+        score += news_boost
+        reason_parts.insert(0, f"★ {news_label} (+{news_boost})")
 
     # ── Practical profit floor ─────────────────────────────────────────
     # Penalise items where the absolute GP reward is too small to bother,
     # regardless of how good the % metrics look.
-    if daily_flip_profit < 25_000:    score -= 25
-    elif daily_flip_profit < 100_000: score -= 12
-    elif daily_flip_profit < 250_000: score -= 4
+    if daily_flip_profit < 25_000:
+        score -= 25
+        reason_parts.append(f"daily profit ~{_fmt_gp(int(daily_flip_profit))} too low (−25)")
+    elif daily_flip_profit < 100_000:
+        score -= 12
+        reason_parts.append(f"daily profit ~{_fmt_gp(int(daily_flip_profit))} below target (−12)")
+    elif daily_flip_profit < 250_000:
+        score -= 4
+        reason_parts.append(f"daily profit ~{_fmt_gp(int(daily_flip_profit))} moderate (−4)")
 
     score = max(0.0, min(100.0, score))
 
@@ -166,9 +252,7 @@ def score_item(timeseries: list[dict], buy_limit: int,
         current_low=current_low, merch_profit=merch_profit,
     )
 
-    # ── Reason string ──────────────────────────────────────────────────
-    reason = _build_reason(strategy, slope_90d, item_rsi, is_dip,
-                            net_margin_pct, ma_deviation, news_label, mtf_score)
+    reason = " · ".join(reason_parts) if reason_parts else "Neutral signals"
 
     return {
         "score":            round(score, 1),
@@ -240,23 +324,12 @@ def _classify_strategy(slope_90d, rsi_val, is_dip, net_margin_pct,
     return "FLIP"
 
 
-def _build_reason(strategy, slope_90d, rsi_val, is_dip,
-                   net_margin_pct, ma_deviation, news_label, mtf_score):
-    parts = []
-    if strategy == "NEWS" and news_label:
-        parts.append(news_label)
-    if strategy == "FLIP":
-        parts.append(f"{net_margin_pct:.1f}% net margin")
-    if is_dip:
-        parts.append(f"{abs(ma_deviation):.0f}% below MA90")
-    if mtf_score >= 2:
-        parts.append("multi-TF uptrend")
-    elif mtf_score <= -2:
-        parts.append("multi-TF downtrend")
-    if rsi_val < 35:
-        parts.append(f"oversold RSI {rsi_val:.0f}")
-    elif rsi_val > 70:
-        parts.append(f"overbought RSI {rsi_val:.0f}")
-    if not parts:
-        parts.append("Neutral")
-    return "; ".join(parts)
+def _fmt_gp(gp: int) -> str:
+    if gp >= 1_000_000_000:
+        return f"{gp/1_000_000_000:.2f}B"
+    if gp >= 1_000_000:
+        return f"{gp/1_000_000:.1f}M"
+    if gp >= 1_000:
+        return f"{gp/1_000:.0f}k"
+    return f"{gp:,}"
+

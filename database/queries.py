@@ -160,7 +160,8 @@ def get_item_ids_for_scoring(conn: sqlite3.Connection) -> list[int]:
 def get_watchlist(conn: sqlite3.Connection) -> list[dict]:
     cursor = conn.execute(
         """
-        SELECT w.item_id, i.name, w.alert_buy_below, w.alert_sell_above, w.notes
+        SELECT w.item_id, i.name, w.alert_buy_below, w.alert_sell_above,
+               w.notes, w.buy_price, w.quantity
         FROM   watchlist w
         JOIN   items i ON i.id = w.item_id
         ORDER  BY i.name
@@ -172,17 +173,22 @@ def get_watchlist(conn: sqlite3.Connection) -> list[dict]:
 def add_to_watchlist(conn: sqlite3.Connection, item_id: int,
                      buy_below: Optional[int] = None,
                      sell_above: Optional[int] = None,
-                     notes: str = ""):
+                     notes: str = "",
+                     buy_price: Optional[int] = None,
+                     quantity: Optional[int] = None):
     conn.execute(
         """
-        INSERT INTO watchlist (item_id, alert_buy_below, alert_sell_above, notes)
-        VALUES (?, ?, ?, ?)
+        INSERT INTO watchlist (item_id, alert_buy_below, alert_sell_above, notes,
+                               buy_price, quantity)
+        VALUES (?, ?, ?, ?, ?, ?)
         ON CONFLICT(item_id) DO UPDATE SET
             alert_buy_below  = excluded.alert_buy_below,
             alert_sell_above = excluded.alert_sell_above,
-            notes            = excluded.notes
+            notes            = excluded.notes,
+            buy_price        = excluded.buy_price,
+            quantity         = excluded.quantity
         """,
-        (item_id, buy_below, sell_above, notes),
+        (item_id, buy_below, sell_above, notes, buy_price, quantity),
     )
     conn.commit()
 

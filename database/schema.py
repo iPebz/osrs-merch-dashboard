@@ -98,3 +98,10 @@ def _migrate(conn):
                 ON price_snapshots (item_id, timestamp, interval)
         """)
         conn.commit()
+
+    # Migration 2: add position tracking columns to watchlist
+    existing_cols = {row["name"] for row in conn.execute("PRAGMA table_info(watchlist)").fetchall()}
+    if "buy_price" not in existing_cols:
+        conn.execute("ALTER TABLE watchlist ADD COLUMN buy_price INTEGER")
+        conn.execute("ALTER TABLE watchlist ADD COLUMN quantity  INTEGER")
+        conn.commit()

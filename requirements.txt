@@ -9,3 +9,5 @@ plyer==2.1.0
 schedule==1.2.1
 python-dotenv==1.0.0
 beautifulsoup4==4.12.3
+fastapi
+uvicorn[standard]
