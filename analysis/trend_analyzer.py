@@ -166,3 +166,110 @@ def price_momentum(df: pd.DataFrame, short: int = 7, long: int = 30) -> float:
     Negative = decelerating / rolling over (caution).
     """
     return price_slope(df, short) - price_slope(df, long)
+
+
+# ── Advanced indicators ────────────────────────────────────────────────────────
+
+def macd(df: pd.DataFrame, fast: int = 12, slow: int = 26, signal: int = 9,
+         column: str = "mid") -> dict:
+    """MACD momentum indicator. Returns line, signal, histogram, and crossover flags."""
+    empty = {"macd": 0.0, "signal": 0.0, "histogram": 0.0,
+             "histogram_prev": 0.0, "bullish_cross": False, "bearish_cross": False}
+    if len(df) < slow + signal:
+        return empty
+    prices = df[column]
+    ema_fast   = prices.ewm(span=fast,   adjust=False).mean()
+    ema_slow   = prices.ewm(span=slow,   adjust=False).mean()
+    macd_line  = ema_fast - ema_slow
+    sig_line   = macd_line.ewm(span=signal, adjust=False).mean()
+    hist       = macd_line - sig_line
+    hist_val   = float(hist.iloc[-1])   if not pd.isna(hist.iloc[-1])   else 0.0
+    hist_prev  = float(hist.iloc[-2])   if len(hist) >= 2 and not pd.isna(hist.iloc[-2]) else 0.0
+    macd_val   = float(macd_line.iloc[-1]) if not pd.isna(macd_line.iloc[-1]) else 0.0
+    sig_val    = float(sig_line.iloc[-1])  if not pd.isna(sig_line.iloc[-1])  else 0.0
+    return {
+        "macd":           macd_val,
+        "signal":         sig_val,
+        "histogram":      hist_val,
+        "histogram_prev": hist_prev,
+        "bullish_cross":  hist_val > 0 and hist_prev <= 0,
+        "bearish_cross":  hist_val < 0 and hist_prev >= 0,
+    }
+
+
+def bollinger_bands(df: pd.DataFrame, window: int = 20, num_std: float = 2.0,
+                    column: str = "mid") -> dict:
+    """Bollinger Bands. percent_b: 0 = at lower band, 1 = at upper band."""
+    empty = {"upper": 0.0, "middle": 0.0, "lower": 0.0,
+             "percent_b": 0.5, "bandwidth": 0.0, "squeeze": False}
+    if len(df) < window:
+        return empty
+    prices  = df[column]
+    middle  = prices.rolling(window=window, min_periods=window).mean()
+    std     = prices.rolling(window=window, min_periods=window).std()
+    upper   = middle + num_std * std
+    lower   = middle - num_std * std
+    mid_val = float(middle.iloc[-1]) if not pd.isna(middle.iloc[-1]) else 0.0
+    up_val  = float(upper.iloc[-1])  if not pd.isna(upper.iloc[-1])  else 0.0
+    lo_val  = float(lower.iloc[-1])  if not pd.isna(lower.iloc[-1])  else 0.0
+    cur     = float(prices.iloc[-1])
+    band_w  = up_val - lo_val
+    pct_b   = (cur - lo_val) / band_w if band_w > 0 else 0.5
+    bw      = band_w / mid_val        if mid_val > 0 else 0.0
+    return {
+        "upper":     up_val,
+        "middle":    mid_val,
+        "lower":     lo_val,
+        "percent_b": round(pct_b, 4),
+        "bandwidth": round(bw,    4),
+        "squeeze":   bw < 0.05,
+    }
+
+
+def volume_price_divergence(df: pd.DataFrame, lookback: int = 14) -> str:
+    """
+    Compare price direction vs volume direction over lookback days.
+    BULLISH_CONFIRM  — price up, volume up   (healthy uptrend)
+    BEARISH_DIVERGE  — price up, volume down (weak rally, suspect)
+    BULLISH_DIVERGE  — price down, volume down (weak selloff, potential reversal)
+    BEARISH_CONFIRM  — price down, volume up  (distribution / capitulation)
+    """
+    if len(df) < lookback + 1:
+        return "NEUTRAL"
+    recent    = df.tail(lookback)
+    price_up  = recent["mid"].iloc[-1]       > recent["mid"].iloc[0]
+    vol_up    = recent["total_vol"].iloc[-1]  > recent["total_vol"].iloc[0]
+    if price_up and vol_up:
+        return "BULLISH_CONFIRM"
+    if price_up and not vol_up:
+        return "BEARISH_DIVERGE"
+    if not price_up and not vol_up:
+        return "BULLISH_DIVERGE"
+    return "BEARISH_CONFIRM"
+
+
+def falling_knife_risk(df: pd.DataFrame, slope_threshold: float = -0.5,
+                       rsi_ceiling: float = 35.0) -> bool:
+    """
+    True when slope_90d < threshold AND RSI < ceiling.
+    An oversold RSI in a steep downtrend is NOT a buy signal — it is a falling knife.
+    Suppresses RSI bonus in MERCH scoring and blocks MERCH classification.
+    """
+    return price_slope(df, 90) < slope_threshold and rsi(df) < rsi_ceiling
+
+
+def average_margin_pct_taxed(df: pd.DataFrame, days: int = 14,
+                              tax_rate: float = 0.01,
+                              tax_cap: float = 5_000_000) -> float:
+    """
+    Average daily net margin % after GE tax over the last N candles.
+    More robust than spot margin — resistant to single-candle manipulation.
+    """
+    recent = df.tail(days).copy()
+    if recent.empty:
+        return 0.0
+    low  = recent["low"].replace(0, np.nan)
+    tax  = (recent["high"] * tax_rate).clip(upper=tax_cap)
+    pct  = (recent["high"] - recent["low"] - tax) / low * 100
+    val  = pct.mean()
+    return float(val) if not pd.isna(val) else 0.0
