@@ -203,12 +203,25 @@ tbody tr.selected { background: #0f3460 !important; }
 #wl-table th:nth-child(15) { width:64px }
 
 /* ── Recommendations ───────────────────────────────────────── */
-.rec-header { display: flex; align-items: center; gap: 14px; padding: 4px 0 14px; }
-.rec-header h2 { font-size: 16px; color: var(--accent); }
-.toggle-btns { display: flex; gap: 4px; }
-.toggle-btn { background: var(--bg3); color: var(--dim);
-              border: 1px solid var(--border); padding: 4px 14px; }
-.toggle-btn.active { background: #0f3460; color: #fff; border-color: var(--flip); }
+.rec-top-bar { display: flex; align-items: center; gap: 14px; padding: 6px 0 4px; }
+.rec-top-bar h2 { font-size: 16px; color: var(--accent); }
+
+.rec-tabs {
+  display: flex; gap: 0; flex-wrap: wrap;
+  border-bottom: 1px solid var(--border); margin-bottom: 12px;
+}
+.rec-tab {
+  background: none; border: none; border-bottom: 2px solid transparent;
+  color: var(--dim); padding: 9px 20px; font-size: 13px; font-weight: 600;
+  cursor: pointer; transition: color .15s; margin-bottom: -1px;
+}
+.rec-tab:hover { color: var(--text); }
+.rec-tab.active                    { color: var(--accent); border-bottom-color: var(--accent); }
+.rec-tab[data-view="FLIP"].active  { color: var(--flip);  border-bottom-color: var(--flip); }
+.rec-tab[data-view="MERCH"].active { color: var(--merch); border-bottom-color: var(--merch); }
+.rec-tab[data-view="TREND"].active { color: var(--trend); border-bottom-color: var(--trend); }
+.rec-tab[data-view="NEWS"].active  { color: var(--news);  border-bottom-color: var(--news); }
+.rec-tab-price { margin-left: auto; font-style: italic; }
 
 .rec-section { background: var(--bg2); border-radius: 8px;
                margin-bottom: 12px; padding: 12px 14px; }

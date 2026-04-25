@@ -159,12 +159,14 @@ const Dashboard = {
     const minScore = +document.getElementById("f-score").value;
     const search   = document.getElementById("f-search").value.trim().toLowerCase();
     const strategy = document.getElementById("f-strat").value;
+    const minPrice = parsePrice(document.getElementById("f-min-price").value);
     const maxPrice = parsePrice(document.getElementById("f-price").value);
     document.getElementById("score-val").textContent = minScore;
 
     let rows = this._items.filter(i =>
       (i.score||0) >= minScore &&
       (!search || (i.name||"").toLowerCase().includes(search)) &&
+      (i.current_low||0) >= minPrice &&
       (i.current_low||0) <= maxPrice &&
       (!strategy || i.strategy === strategy)
     );
@@ -269,9 +271,10 @@ document.getElementById("items-tbody").addEventListener("click", (e) => {
 });
 
 // Filter inputs → live re-filter
-document.getElementById("f-score").addEventListener("input", () => Dashboard.applyFilters());
-document.getElementById("f-search").addEventListener("input", () => Dashboard.applyFilters());
-document.getElementById("f-strat").addEventListener("change", () => Dashboard.applyFilters());
+document.getElementById("f-score").addEventListener("input",    () => Dashboard.applyFilters());
+document.getElementById("f-search").addEventListener("input",   () => Dashboard.applyFilters());
+document.getElementById("f-strat").addEventListener("change",   () => Dashboard.applyFilters());
+document.getElementById("f-min-price").addEventListener("input", () => Dashboard.applyFilters());
 
 // ═══════════════════════════════════════════════════
 // CHARTS
@@ -694,7 +697,7 @@ function _resolveWLSearch() {
 // RECOMMENDATIONS
 // ═══════════════════════════════════════════════════
 const Recs = {
-  _view: "strategy",
+  _view: "FLIP",
   _loaded: false,
 
   async load() {
@@ -704,42 +707,60 @@ const Recs = {
 
   switchView(view) {
     this._view = view;
-    document.querySelectorAll(".toggle-btn").forEach(b =>
-      b.classList.toggle("active", b.dataset.view===view));
+    document.querySelectorAll(".rec-tab").forEach(b =>
+      b.classList.toggle("active", b.dataset.view === view));
     this._fetchAndRender();
   },
 
   async _fetchAndRender() {
+    const apiView = this._view === "price" ? "price" : "strategy";
     try {
-      const data = await api(`/api/recommendations?view=${this._view}`);
-      this._render(data.sections);
+      const data = await api(`/api/recommendations?view=${apiView}`);
+      if (this._view === "price") {
+        this._renderSections(data.sections);
+      } else {
+        const section = data.sections.find(s => s.key === this._view);
+        this._renderStrategy(section);
+      }
     } catch(e) { console.error("Recs load:", e); }
   },
 
-  _render(sections) {
-    const total = sections.reduce((s,sec)=>s+sec.items.length,0);
-    document.getElementById("rec-count").textContent = total ? `${total} items` : "";
+  _renderStrategy(section) {
+    const items = section?.items || [];
+    document.getElementById("rec-count").textContent = items.length ? `${items.length} items` : "";
+    const el = document.getElementById("rec-sections");
+    if (!items.length) {
+      el.innerHTML = `<div class="placeholder">No opportunities in this category. Press "Score All Items" first.</div>`;
+      return;
+    }
+    el.innerHTML = `<div class="rec-cards">${items.map(i => this._cardHtml(i)).join("")}</div>`;
+    this._wireCards(el);
+  },
 
+  _renderSections(sections) {
+    const total = sections.reduce((s, sec) => s + sec.items.length, 0);
+    document.getElementById("rec-count").textContent = total ? `${total} items` : "";
     const el = document.getElementById("rec-sections");
     if (!sections.length) {
       el.innerHTML = `<div class="placeholder">Press "Score All Items" first.</div>`;
       return;
     }
-
     el.innerHTML = sections.map(sec => {
       const cardsHtml = sec.items.length
-        ? sec.items.map(item => this._cardHtml(item)).join("")
+        ? sec.items.map(i => this._cardHtml(i)).join("")
         : `<span class="dim-text">No items in this category.</span>`;
       return `<div class="rec-section">
         <div class="rec-section-header">
           <span class="rec-section-title" style="color:${sec.color}">${escHtml(sec.title)}</span>
-          ${sec.subtitle?`<span class="rec-section-sub">— ${escHtml(sec.subtitle)}</span>`:""}
+          ${sec.subtitle ? `<span class="rec-section-sub">— ${escHtml(sec.subtitle)}</span>` : ""}
         </div>
         <div class="rec-cards">${cardsHtml}</div>
       </div>`;
     }).join("");
+    this._wireCards(el);
+  },
 
-    // Wire click events
+  _wireCards(el) {
     el.querySelectorAll(".rec-card[data-id]").forEach(card => {
       card.addEventListener("click", (e) => {
         if (e.target.classList.contains("rc-toggle")) return;
@@ -750,7 +771,7 @@ const Recs = {
     el.querySelectorAll(".rc-toggle").forEach(btn => {
       btn.addEventListener("click", () => {
         const detail = btn.previousElementSibling;
-        const open = detail.style.display==="block";
+        const open = detail.style.display === "block";
         detail.style.display = open ? "none" : "block";
         btn.textContent = open ? "▼ Details" : "▲ Hide";
       });
@@ -758,26 +779,31 @@ const Recs = {
   },
 
   _cardHtml(item) {
-    const sc = item.score||0;
-    const strat = item.strategy||"";
-    const stratColor = STRAT_COLORS[strat]||"#aaa";
+    const sc = item.score || 0;
+    const strat = item.strategy || "";
+    const stratColor = STRAT_COLORS[strat] || "#aaa";
     const news = item.news_signals?.length ? `<span class="news-star">★</span>` : "";
     const rcIcon = item.icon_url ? `<img src="${item.icon_url}" width="24" height="24" style="vertical-align:middle;margin-right:6px;image-rendering:pixelated" onerror="this.style.display='none'">` : "";
-    return `<div class="rec-card${item.news_signals?.length?' has-news':''}"
-             data-id="${item.item_id}" data-name="${escHtml(item.name||'')}">
+    return `<div class="rec-card${item.news_signals?.length ? ' has-news' : ''}"
+             data-id="${item.item_id}" data-name="${escHtml(item.name || '')}">
       <div class="rc-top">
-        <span class="rc-name">${rcIcon}${escHtml(item.name||"")}</span>
+        <span class="rc-name">${rcIcon}${escHtml(item.name || "")}</span>
         <span class="rc-badge" style="background:${stratColor}22;color:${stratColor}">${strat}</span>
         ${news}
       </div>
       <div class="rc-score" style="color:${scoreColor(sc)}">Score: ${sc.toFixed(0)}</div>
       <div class="rc-price">${fmtGP(item.current_low)}</div>
-      <div class="rc-summary">${escHtml(item.summary||"")}</div>
-      <div class="rc-detail">${escHtml(item.detail||"")}</div>
+      <div class="rc-summary">${escHtml(item.summary || "")}</div>
+      <div class="rc-detail">${escHtml(item.detail || "")}</div>
       <button class="rc-toggle">▼ Details</button>
     </div>`;
   },
 };
+
+// Rec tab click handlers (set up once, no inline onclick needed)
+document.querySelectorAll(".rec-tab").forEach(btn => {
+  btn.addEventListener("click", () => Recs.switchView(btn.dataset.view));
+});
 
 // ═══════════════════════════════════════════════════
 // AUTOCOMPLETE (shared)

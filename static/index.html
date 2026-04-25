@@ -54,6 +54,10 @@
       <input type="text" id="f-search" placeholder="item name…">
     </label>
     <label>
+      Min Price
+      <input type="text" id="f-min-price" value="0" style="width:80px">
+    </label>
+    <label>
       Max Price
       <input type="text" id="f-price" value="2000M" style="width:80px">
     </label>
@@ -186,13 +190,16 @@
 
 <!-- ══════════════ RECOMMENDATIONS ══════════════ -->
 <div id="tab-recommendations" class="tab-content hidden">
-  <div class="rec-header">
+  <div class="rec-top-bar">
     <h2>Recommendations</h2>
-    <div class="toggle-btns">
-      <button class="toggle-btn active" data-view="strategy" onclick="Recs.switchView('strategy')">By Strategy</button>
-      <button class="toggle-btn"        data-view="price"    onclick="Recs.switchView('price')">By Price Range</button>
-    </div>
     <span id="rec-count" class="dim-text"></span>
+  </div>
+  <div class="rec-tabs">
+    <button class="rec-tab active" data-view="FLIP">Flips</button>
+    <button class="rec-tab"        data-view="MERCH">Merch</button>
+    <button class="rec-tab"        data-view="TREND">Trend</button>
+    <button class="rec-tab"        data-view="NEWS">News</button>
+    <button class="rec-tab rec-tab-price" data-view="price">By Price Range</button>
   </div>
   <div id="rec-sections"></div>
 </div>
