@@ -6,7 +6,8 @@ from api.rate_limiter import wiki_limiter, item_limiter
 from analysis.opportunity_scorer import score_item
 from database.queries import (
     upsert_items, save_snapshots, get_item_ids_for_scoring,
-    get_snapshots, get_all_snapshots_batch, get_all_items, get_item_icon_urls,
+    get_snapshots, get_all_snapshots_batch, get_latest_snapshots_batch,
+    get_all_items, get_item_icon_urls,
     replace_news_signals, get_news_signals_for_items,
 )
 
@@ -59,15 +60,31 @@ class DataService:
 
     def score_all_items(self) -> list[dict]:
         # Single batch query instead of N individual get_snapshots() calls
-        all_items    = {i["id"]: i for i in get_all_items(self.db)}
-        news_by_item = get_news_signals_for_items(self.db)
-        all_snapshots = get_all_snapshots_batch(self.db)  # 1 query for all items
+        all_items      = {i["id"]: i for i in get_all_items(self.db)}
+        news_by_item   = get_news_signals_for_items(self.db)
+        all_snapshots  = get_all_snapshots_batch(self.db)   # 24h historical candles
+        latest_prices  = get_latest_snapshots_batch(self.db)  # real-time spot prices
 
         results = []
         for item_id, ts in all_snapshots.items():
             item = all_items.get(item_id)
             if not item or len(ts) < 1:
                 continue
+
+            # Overlay the real-time price as the final candle if it is more recent
+            # than the last 24h candle — ensures current_low/high are not stale.
+            latest = latest_prices.get(item_id)
+            if latest:
+                last_ts = ts[-1]["timestamp"] if ts else 0
+                if latest["timestamp"] > last_ts:
+                    ts = ts + [{
+                        "timestamp":       latest["timestamp"],
+                        "avgHighPrice":    latest["high"],
+                        "avgLowPrice":     latest["low"],
+                        "highPriceVolume": None,
+                        "lowPriceVolume":  None,
+                    }]
+
             item_signals = news_by_item.get(item_id, [])
             score_dict   = score_item(ts,
                                       buy_limit=item.get("buy_limit") or 0,

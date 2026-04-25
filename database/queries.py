@@ -106,6 +106,22 @@ def get_snapshots(conn: sqlite3.Connection, item_id: int,
     ]
 
 
+def get_latest_snapshots_batch(conn: sqlite3.Connection) -> dict:
+    """Most recent real-time 'latest' snapshot per item (from /latest API)."""
+    cursor = conn.execute(
+        """
+        SELECT item_id, high, low, MAX(timestamp) AS ts
+        FROM   price_snapshots
+        WHERE  interval = 'latest' AND high IS NOT NULL AND low IS NOT NULL
+        GROUP  BY item_id
+        """
+    )
+    return {
+        r["item_id"]: {"high": r["high"], "low": r["low"], "timestamp": r["ts"]}
+        for r in cursor.fetchall()
+    }
+
+
 def get_all_snapshots_batch(conn: sqlite3.Connection) -> dict:
     """
     Single query returning ALL 24h snapshots grouped by item_id.
