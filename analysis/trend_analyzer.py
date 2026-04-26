@@ -159,6 +159,20 @@ def estimated_daily_flip_profit(margin_gp: float, buy_limit: int,
     return margin_gp * buy_limit * cycles_per_day
 
 
+def price_change_pct(df: pd.DataFrame, days: int = 1) -> float:
+    """Actual % price change from `days` candles ago to the most recent candle.
+    Unlike price_slope (normalized per-period rate), this returns the raw
+    percentage move — e.g. +2.5 means the price rose 2.5% over `days` days.
+    """
+    if len(df) < days + 1:
+        return 0.0
+    old = df["mid"].iloc[-(days + 1)]
+    new = df["mid"].iloc[-1]
+    if pd.isna(old) or pd.isna(new) or old == 0:
+        return 0.0
+    return float((new - old) / old * 100)
+
+
 def price_momentum(df: pd.DataFrame, short: int = 7, long: int = 30) -> float:
     """
     Momentum: short-term slope minus long-term slope.

@@ -204,7 +204,7 @@ const Dashboard = {
         <td>${fmtGP(r.current_low)}</td>
         <td>${r.net_margin_pct!=null?fmtPct(r.net_margin_pct):"—"}</td>
         <td>${fmtGP(r.daily_flip_profit)}</td>
-        <td style="color:${slopeColor(r.slope_7d)}">${r.slope_7d!=null?fmtPct(r.slope_7d):"—"}</td>
+        <td style="color:${changeColor(r.change_1d)}">${r.change_1d!=null?fmtPct(r.change_1d):"—"}</td>
         <td style="color:${slopeColor(r.slope_90d)}">${r.slope_90d!=null?fmtPct(r.slope_90d):"—"}</td>
         <td style="color:${rsiColor(r.rsi)}">${r.rsi!=null?r.rsi.toFixed(0):"—"}</td>
         <td>${r.avg_daily_vol!=null?Math.round(r.avg_daily_vol).toLocaleString():"—"}</td>
@@ -467,6 +467,8 @@ const Charts = {
         const sl90 = linSlope(mids.slice(-90));
         const rsiArr = calcRSI(mids, 14);
         const rsiVal = rsiArr[rsiArr.length-1];
+        const chg1d = mids.length >= 2 ? (mids[mids.length-1]-mids[mids.length-2])/mids[mids.length-2]*100 : null;
+        if (chg1d != null) parts.push(`<div class="cs-item"><span class="cs-label">1d Change</span><span class="cs-value" style="color:${changeColor(chg1d)}">${fmtPct(chg1d)}</span></div>`);
         parts.push(`<div class="cs-item"><span class="cs-label">7d Slope</span><span class="cs-value" style="color:${slopeColor(sl7)}">${fmtPct(sl7)}</span></div>`);
         parts.push(`<div class="cs-item"><span class="cs-label">30d Slope</span><span class="cs-value" style="color:${slopeColor(sl30)}">${fmtPct(sl30)}</span></div>`);
         parts.push(`<div class="cs-item"><span class="cs-label">90d Slope</span><span class="cs-value" style="color:${slopeColor(sl90)}">${fmtPct(sl90)}</span></div>`);
@@ -561,7 +563,7 @@ const Watchlist = {
         <td>${fmtGP(r.current_low)}</td>
         <td>${r.net_margin_pct!=null?fmtPct(r.net_margin_pct):"—"}</td>
         <td>${fmtGP(r.daily_flip_profit)}</td>
-        <td style="color:${slopeColor(r.slope_7d)}">${r.slope_7d!=null?fmtPct(r.slope_7d):"—"}</td>
+        <td style="color:${changeColor(r.change_1d)}">${r.change_1d!=null?fmtPct(r.change_1d):"—"}</td>
         <td style="color:${slopeColor(r.slope_90d)}">${r.slope_90d!=null?fmtPct(r.slope_90d):"—"}</td>
         <td style="color:${rsiColor(r.rsi)}">${r.rsi!=null?r.rsi.toFixed(0):"—"}</td>
         <td>${r.avg_daily_vol!=null?Math.round(r.avg_daily_vol).toLocaleString():"—"}</td>
@@ -902,6 +904,13 @@ function slopeColor(v) {
   if (v == null) return "#888";
   if (v > 0.05)  return "#2ecc71";
   if (v < -0.05) return "#e74c3c";
+  return "#aaa";
+}
+
+function changeColor(v) {
+  if (v == null) return "#888";
+  if (v > 0.1)  return "#2ecc71";
+  if (v < -0.1) return "#e74c3c";
   return "#aaa";
 }
 
