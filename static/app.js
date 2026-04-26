@@ -88,18 +88,36 @@ const statusText = document.getElementById("status-text");
 let _statusInterval = null;
 let _lastScoredCount = 0;
 
+let _lastRefreshedAt = 0;
+
+function _ageStr(ts) {
+  if (!ts) return "";
+  const secs = Math.floor(Date.now() / 1000) - ts;
+  if (secs < 10)  return "just now";
+  if (secs < 60)  return `${secs}s ago`;
+  if (secs < 3600) return `${Math.floor(secs/60)}m ago`;
+  return `${Math.floor(secs/3600)}h ago`;
+}
+
 function pollStatus() {
   clearInterval(_statusInterval);
   _statusInterval = setInterval(async () => {
     try {
       const s = await api("/api/status");
-      statusText.textContent = s.message;
+      const age = s.refreshed_at ? ` · prices ${_ageStr(s.refreshed_at)}` : "";
+      statusText.textContent = s.message + age;
       statusDot.className = "dot " + (s.running ? "running" : "idle");
       // Auto-reload dashboard whenever the scored-item count increases
-      // (catches initial score completing and manual re-scores)
       if ((s.count || 0) > _lastScoredCount) {
         _lastScoredCount = s.count;
         Dashboard.load();
+      }
+      // Auto-reload dashboard when prices refresh (~60s cycle)
+      if (s.refreshed_at && s.refreshed_at !== _lastRefreshedAt) {
+        _lastRefreshedAt = s.refreshed_at;
+        if (!s.running && document.getElementById("tab-dashboard").classList.contains("active")) {
+          Dashboard.load();
+        }
       }
     } catch {}
   }, 1500);
@@ -205,7 +223,7 @@ const Dashboard = {
         <td>${r.net_margin_pct!=null?fmtPct(r.net_margin_pct):"—"}</td>
         <td>${fmtGP(r.daily_flip_profit)}</td>
         <td style="color:${changeColor(r.change_1d)}">${r.change_1d!=null?fmtPct(r.change_1d):"—"}</td>
-        <td style="color:${slopeColor(r.slope_90d)}">${r.slope_90d!=null?fmtPct(r.slope_90d):"—"}</td>
+        <td style="color:${changeColor(r.change_30d)}">${r.change_30d!=null?fmtPct(r.change_30d):"—"}</td>
         <td style="color:${rsiColor(r.rsi)}">${r.rsi!=null?r.rsi.toFixed(0):"—"}</td>
         <td>${r.avg_daily_vol!=null?Math.round(r.avg_daily_vol).toLocaleString():"—"}</td>
         <td style="text-align:center"><button class="btn-reason"
@@ -564,7 +582,7 @@ const Watchlist = {
         <td>${r.net_margin_pct!=null?fmtPct(r.net_margin_pct):"—"}</td>
         <td>${fmtGP(r.daily_flip_profit)}</td>
         <td style="color:${changeColor(r.change_1d)}">${r.change_1d!=null?fmtPct(r.change_1d):"—"}</td>
-        <td style="color:${slopeColor(r.slope_90d)}">${r.slope_90d!=null?fmtPct(r.slope_90d):"—"}</td>
+        <td style="color:${changeColor(r.change_30d)}">${r.change_30d!=null?fmtPct(r.change_30d):"—"}</td>
         <td style="color:${rsiColor(r.rsi)}">${r.rsi!=null?r.rsi.toFixed(0):"—"}</td>
         <td>${r.avg_daily_vol!=null?Math.round(r.avg_daily_vol).toLocaleString():"—"}</td>
         <td>${r.buy_price!=null?r.buy_price.toLocaleString():"—"}</td>

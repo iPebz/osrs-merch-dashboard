@@ -63,7 +63,7 @@ def _sanitize(obj):
 _db:     sqlite3.Connection | None = None
 _svc:    DataService        | None = None
 _cache:  list[dict] = []          # scored items
-_status: dict = {"message": "Starting…", "running": False, "count": 0}
+_status: dict = {"message": "Starting…", "running": False, "count": 0, "refreshed_at": 0}
 _lock = threading.Lock()
 
 
@@ -94,6 +94,7 @@ def _do_score():
             fname = icon_map.get(item.get("item_id"))
             if fname:
                 item["icon_url"] = _WIKI_CDN + fname.replace(" ", "_")
+        _patch_cache_prices()
         _set(f"Ready — {len(results)} items scored", count=len(results))
     except Exception as e:
         log.error("Scoring failed: %s", e)
@@ -104,9 +105,48 @@ def _do_refresh():
     _set("Refreshing prices…", running=True)
     try:
         _svc.refresh_latest()
+        _patch_cache_prices()
         _set("Prices refreshed.")
     except Exception as e:
         _set(f"Refresh error: {e}")
+
+
+def _patch_cache_prices():
+    """
+    Fast price patch: update current_low/high and derived margin fields in
+    _cache from the latest DB snapshot without running a full rescore.
+    Called after every background refresh (~60 s) so the table stays live.
+    """
+    import time as _time
+    if not _cache or _db is None:
+        return
+    from database.queries import get_latest_snapshots_batch
+    latest = get_latest_snapshots_batch(_db)
+    if not latest:
+        return
+    for item in _cache:
+        iid = item.get("item_id")
+        lp  = latest.get(iid)
+        if not lp:
+            continue
+        lo, hi = lp.get("low") or 0, lp.get("high") or 0
+        if lo <= 0 or hi <= 0:
+            continue
+        item["current_low"]  = lo
+        item["current_high"] = hi
+        tax     = min(hi * 0.01, 5_000_000)
+        net_gp  = max(0.0, hi - lo - tax)
+        item["net_margin_gp"]  = round(net_gp)
+        item["net_margin_pct"] = round(net_gp / lo * 100, 2) if lo > 0 else 0
+        # Recompute daily flip profit with updated margin
+        liq = item.get("liquidity", 0)
+        bl  = item.get("buy_limit", 0)
+        adv = item.get("avg_daily_vol", 0)
+        if bl > 0 and adv > 0:
+            cycles = min(6.0, adv / bl)
+            item["daily_flip_profit"] = round(net_gp * bl * cycles)
+    with _lock:
+        _status["refreshed_at"] = int(_time.time())
 
 
 def _do_news():
