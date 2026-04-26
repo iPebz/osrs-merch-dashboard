@@ -35,7 +35,10 @@ log = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 # Numpy → Python type sanitizer
 # FastAPI's JSON encoder can't handle numpy.bool_, numpy.int64, etc.
+# Also replaces float nan/inf (not valid JSON) with None.
 # ---------------------------------------------------------------------------
+import math as _math
+
 def _sanitize(obj):
     if isinstance(obj, dict):
         return {k: _sanitize(v) for k, v in obj.items()}
@@ -44,11 +47,14 @@ def _sanitize(obj):
     if isinstance(obj, np.integer):
         return int(obj)
     if isinstance(obj, np.floating):
-        return float(obj)
+        v = float(obj)
+        return None if not _math.isfinite(v) else v
     if isinstance(obj, np.bool_):
         return bool(obj)
     if isinstance(obj, np.ndarray):
         return obj.tolist()
+    if isinstance(obj, float):
+        return None if not _math.isfinite(obj) else obj
     return obj
 
 # ---------------------------------------------------------------------------

@@ -72,7 +72,10 @@ def average_margin(df: pd.DataFrame, days: int = 14) -> float:
 def volatility(df: pd.DataFrame, days: int = 30) -> float:
     recent = df.tail(days)
     pct_changes = recent["mid"].pct_change().dropna()
-    return float(pct_changes.std() * 100) if not pct_changes.empty else 0.0
+    if len(pct_changes) < 2:
+        return 0.0
+    v = float(pct_changes.std() * 100)
+    return v if np.isfinite(v) else 0.0
 
 
 def volume_trend(df: pd.DataFrame, short: int = 7, long: int = 30) -> str:
