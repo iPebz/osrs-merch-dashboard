@@ -175,9 +175,9 @@ def score_item(timeseries: list[dict], buy_limit: int,
         "net_margin_pct":    round(net_margin_pct, 2),
         "net_margin_gp":     round(net_margin_gp),
         "avg_margin_taxed":  round(avg_margin_taxed, 2),
-        "change_1d":         round(price_change_pct(df, 1), 2),
-        "change_7d":         round(price_change_pct(df, 7), 2),
-        "change_30d":        round(price_change_pct(df, 30), 2),
+        "change_1d":         _round_or_none(price_change_pct(df, 1)),
+        "change_7d":         _round_or_none(price_change_pct(df, 7)),
+        "change_30d":        _round_or_none(price_change_pct(df, 30)),
         "slope_7d":          round(slope_7d, 3),
         "slope_30d":         round(slope_30d, 3),
         "slope_90d":         round(slope_90d, 3),
@@ -524,6 +524,10 @@ def _calc_news_boost(signals):
             boost = NEWS_BOOST_MENTIONED
             label = f"in news: {sig['article_title'][:35]}"
     return boost, label
+
+
+def _round_or_none(v, ndigits: int = 2):
+    return round(v, ndigits) if v is not None else None
 
 
 def _fmt_gp(gp: int) -> str:

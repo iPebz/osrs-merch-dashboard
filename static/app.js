@@ -329,8 +329,9 @@ const Charts = {
       return;
     }
 
-    let rows = data.filter(d => d.avgHighPrice && d.avgLowPrice);
-    if (days > 0) rows = rows.slice(-days);
+    // Use all valid rows for warmup, then slice to the visible window
+    const allRows = data.filter(d => d.avgHighPrice && d.avgLowPrice);
+    let rows = days > 0 ? allRows.slice(-days) : allRows;
     if (!rows.length) return;
 
     const dates = rows.map(d => new Date(d.timestamp*1000));
@@ -351,9 +352,13 @@ const Charts = {
                 ratio >= 2.0 ? "rgba(243,156,18,0.9)" :
                                "rgba(155,89,182,0.8)");
     });
-    const ma30   = movingAvg(mids, 30);
-    const ma90   = movingAvg(mids, 90);
-    const rsi    = calcRSI(mids, 14);
+    const ma30 = movingAvg(mids, 30);
+    const ma90 = movingAvg(mids, 90);
+    // Compute RSI over full dataset so the warmup period is offscreen,
+    // then slice to match the visible window — eliminates the leading null gap.
+    const allMids   = allRows.map(d => (d.avgHighPrice + d.avgLowPrice) / 2);
+    const rsiOffset = allRows.length - rows.length;
+    const rsi       = calcRSI(allMids, 14).slice(rsiOffset);
 
     const traces = [
       { x:dates, y:highs, name:"High", line:{color:"rgba(93,173,226,0.4)",width:0},
@@ -399,6 +404,7 @@ const Charts = {
     };
 
     Plotly.react("chart-container", traces, layout, {responsive:true, displayModeBar:false});
+    requestAnimationFrame(() => Plotly.Plots.resize("chart-container"));
     this._updateStats(rows, false);
   },
 
@@ -471,6 +477,7 @@ const Charts = {
     };
 
     Plotly.react("chart-container", traces, layout, {responsive:true, displayModeBar:false});
+    requestAnimationFrame(() => Plotly.Plots.resize("chart-container"));
     this._updateStats(ts, true);
   },
 
