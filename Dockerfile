@@ -5,8 +5,8 @@ WORKDIR /app
 
 # pandas/numpy/Pillow/uvicorn all ship as binary wheels — no compiler needed.
 # Only curl-CA-bundle and a minimal libc are required by the slim base.
-COPY requirements-web.txt .
-RUN pip install --no-cache-dir -r requirements-web.txt
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
 
 # ── Stage 2: runtime image ──────────────────────────────────────────────
 FROM python:3.11-slim
