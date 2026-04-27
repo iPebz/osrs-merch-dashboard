@@ -18,6 +18,7 @@ class RateLimiter:
         self._last_call = time.time()
 
 
-wiki_limiter  = RateLimiter(min_interval_seconds=60)
-item_limiter  = RateLimiter(min_interval_seconds=2)
-jagex_limiter = RateLimiter(min_interval_seconds=3)
+wiki_limiter     = RateLimiter(min_interval_seconds=60)
+item_limiter     = RateLimiter(min_interval_seconds=2)
+prefetch_limiter = RateLimiter(min_interval_seconds=2.5)  # slower, background-only
+jagex_limiter    = RateLimiter(min_interval_seconds=3)

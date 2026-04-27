@@ -19,10 +19,12 @@
     <button class="btn-primary" onclick="App.triggerScore()">Score All Items</button>
     <button class="btn-secondary" onclick="App.triggerRefresh()">Refresh Prices</button>
     <button class="btn-news" onclick="App.triggerNews()">Fetch News</button>
+    <button class="btn-secondary" id="btn-fetch-history" onclick="App.triggerFetchHistory()" title="Download full 365-day price history for all items">Fetch History</button>
   </div>
   <div class="status-bar">
     <span id="status-dot" class="dot idle"></span>
     <span id="status-text">Loading…</span>
+    <span id="history-status" style="margin-left:10px;font-size:11px;color:#888"></span>
   </div>
 </header>
 

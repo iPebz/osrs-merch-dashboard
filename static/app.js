@@ -99,8 +99,23 @@ function _ageStr(ts) {
   return `${Math.floor(secs/3600)}h ago`;
 }
 
+async function _pollHistoryStatus() {
+  try {
+    const h = await api("/api/history/status");
+    const el = document.getElementById("history-status");
+    if (!el) return;
+    if (h.total > 0) {
+      const pct = h.pct;
+      const color = pct >= 90 ? "#2ecc71" : pct >= 50 ? "#f39c12" : "#e74c3c";
+      el.innerHTML = `history: <span style="color:${color}">${h.ready}/${h.total} (${pct}%)</span>`;
+    }
+  } catch {}
+}
+
 function pollStatus() {
   clearInterval(_statusInterval);
+  _pollHistoryStatus();
+  setInterval(_pollHistoryStatus, 15000);  // refresh every 15s
   _statusInterval = setInterval(async () => {
     try {
       const s = await api("/api/status");
@@ -144,7 +159,6 @@ document.querySelectorAll(".tab-btn").forEach(btn => {
 const App = {
   async triggerScore() {
     await api("/api/score", {method:"POST"});
-    // Wait for scoring to finish then reload dashboard
     setTimeout(() => Dashboard.load(), 4000);
   },
   async triggerRefresh() {
@@ -152,6 +166,16 @@ const App = {
   },
   async triggerNews() {
     await api("/api/news", {method:"POST"});
+  },
+  async triggerFetchHistory() {
+    const btn = document.getElementById("btn-fetch-history");
+    btn.disabled = true;
+    btn.textContent = "Fetching…";
+    try {
+      await api("/api/history/fetch", {method:"POST"});
+    } finally {
+      setTimeout(() => { btn.disabled = false; btn.textContent = "Fetch History"; }, 3000);
+    }
   },
 };
 

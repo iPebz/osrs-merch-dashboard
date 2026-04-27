@@ -222,6 +222,30 @@ def api_news(bg: BackgroundTasks):
     return {"queued": True}
 
 
+@app.get("/api/history/status")
+def api_history_status():
+    """How many items have ≥30 daily candles (i.e. enough for 30d% / full charts)."""
+    from database.queries import get_all_items as _get_items, get_snapshots as _get_snaps
+    if _db is None:
+        return {"ready": 0, "total": 0}
+    all_items = _get_items(_db)
+    total = len(all_items)
+    ready = sum(
+        1 for i in all_items
+        if len(_get_snaps(_db, i["id"], interval="24h", limit=30)) >= 30
+    )
+    return {"ready": ready, "total": total, "pct": round(ready / total * 100, 1) if total else 0}
+
+
+@app.post("/api/history/fetch")
+def api_history_fetch(bg: BackgroundTasks):
+    """Manually trigger a background history prefetch for all items."""
+    if _svc is None:
+        return {"queued": False}
+    bg.add_task(_svc.prefetch_all_history)
+    return {"queued": True}
+
+
 @app.get("/api/items")
 def api_items(
     min_score: float = Query(0),
