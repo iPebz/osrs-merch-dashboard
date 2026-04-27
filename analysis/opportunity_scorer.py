@@ -126,7 +126,7 @@ def score_item(timeseries: list[dict], buy_limit: int,
 
     # ── Strategy-specific scoring ─────────────────────────────────────────
     reason_parts: list[str] = []
-    score = 50.0
+    score = 45.0
 
     if strategy == "FLIP":
         score = _score_flip(
@@ -151,11 +151,11 @@ def score_item(timeseries: list[dict], buy_limit: int,
 
     # ── Universal volume spike bonus (all strategies) ─────────────────────
     if vol_spike >= 3.0:
-        score += 15; reason_parts.append(f"vol spike {vol_spike:.1f}x avg (+15)")
+        score += 12; reason_parts.append(f"vol spike {vol_spike:.1f}x avg (+12)")
     elif vol_spike >= 2.0:
-        score += 10; reason_parts.append(f"vol spike {vol_spike:.1f}x avg (+10)")
+        score +=  8; reason_parts.append(f"vol spike {vol_spike:.1f}x avg (+8)")
     elif vol_spike >= 1.5:
-        score +=  5; reason_parts.append(f"vol spike {vol_spike:.1f}x avg (+5)")
+        score +=  3; reason_parts.append(f"vol spike {vol_spike:.1f}x avg (+3)")
 
     # ── Universal news boost for non-NEWS items with weak signals ─────────
     if strategy != "NEWS":
@@ -259,9 +259,9 @@ def _score_flip(score, parts, avg_margin_taxed, liq, vol_t, vpd, bb,
 
     # Absolute GP floor — small-margin items waste GE slots
     if daily_flip_profit < 25_000:
-        score -= 25; parts.append(f"daily profit ~{_fmt_gp(int(daily_flip_profit))} too low (−25)")
+        score -= 28; parts.append(f"daily profit ~{_fmt_gp(int(daily_flip_profit))} too low (−28)")
     elif daily_flip_profit < 100_000:
-        score -= 12; parts.append(f"daily profit ~{_fmt_gp(int(daily_flip_profit))} below target (−12)")
+        score -= 14; parts.append(f"daily profit ~{_fmt_gp(int(daily_flip_profit))} below target (−14)")
     elif daily_flip_profit < 250_000:
         score -= 4;  parts.append(f"daily profit ~{_fmt_gp(int(daily_flip_profit))} moderate (−4)")
 
@@ -272,7 +272,7 @@ def _score_merch(score, parts, ma_deviation, item_rsi, slope_90d, upside_to_res,
                  bb, vpd, merch_profit, knife_risk):
     # Primary: dip depth below MA90
     if ma_deviation < -25:
-        score += 20; parts.append(f"{abs(ma_deviation):.0f}% below MA90 — very deep dip (+20)")
+        score += 18; parts.append(f"{abs(ma_deviation):.0f}% below MA90 — very deep dip (+18)")
     elif ma_deviation < -15:
         score += 13; parts.append(f"{abs(ma_deviation):.0f}% below MA90 — dip (+13)")
     elif ma_deviation < -8:
@@ -341,11 +341,11 @@ def _score_trend(score, parts, mtf_score, macd_data, item_rsi, slope_90d,
                  momentum, vpd, bb):
     # Primary: multi-timeframe agreement
     if mtf_score == 3:
-        score += 25; parts.append("all 3 timeframes bullish (+25)")
+        score += 22; parts.append("all 3 timeframes bullish (+22)")
     elif mtf_score == 2:
-        score += 15; parts.append("2/3 timeframes bullish (+15)")
+        score += 13; parts.append("2/3 timeframes bullish (+13)")
     elif mtf_score == 1:
-        score +=  7; parts.append("1/3 timeframes bullish (+7)")
+        score +=  6; parts.append("1/3 timeframes bullish (+6)")
     elif mtf_score == -1:
         score -=  8; parts.append("1 timeframe bearish (−8)")
     elif mtf_score == -2:
@@ -355,7 +355,7 @@ def _score_trend(score, parts, mtf_score, macd_data, item_rsi, slope_90d,
 
     # Primary: MACD momentum confirmation
     if macd_data.get("bullish_cross"):
-        score += 12; parts.append("MACD bullish crossover (+12)")
+        score += 10; parts.append("MACD bullish crossover (+10)")
     elif macd_data.get("histogram", 0) > 0:
         score +=  6; parts.append("MACD positive (+6)")
     elif macd_data.get("bearish_cross"):

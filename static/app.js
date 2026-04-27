@@ -337,16 +337,19 @@ const Charts = {
     const highs  = rows.map(d => d.avgHighPrice);
     const lows   = rows.map(d => d.avgLowPrice);
     const mids   = rows.map(d => (d.avgHighPrice+d.avgLowPrice)/2);
-    const vols      = rows.map(d => (d.highPriceVolume||0)+(d.lowPriceVolume||0));
-    const avgVol30  = movingAvg(vols, 30);
-    const volColors = vols.map((v, i) => {
+    const vols     = rows.map(d => (d.highPriceVolume||0)+(d.lowPriceVolume||0));
+    const avgVol30 = movingAvg(vols, 30);
+    const spkX = [], spkY = [], spkC = [];
+    vols.forEach((v, i) => {
       const avg = avgVol30[i] || 1;
-      if (avg <= 0 || v <= 0) return "rgba(93,173,226,0.5)";
+      if (avg <= 0 || v <= 0) return;
       const ratio = v / avg;
-      if (ratio >= 3.0) return "rgba(231,76,60,0.85)";
-      if (ratio >= 2.0) return "rgba(243,156,18,0.85)";
-      if (ratio >= 1.5) return "rgba(155,89,182,0.7)";
-      return "rgba(93,173,226,0.5)";
+      if (ratio < 1.5) return;
+      spkX.push(dates[i]);
+      spkY.push(v);
+      spkC.push(ratio >= 3.0 ? "rgba(231,76,60,0.9)" :
+                ratio >= 2.0 ? "rgba(243,156,18,0.9)" :
+                               "rgba(155,89,182,0.8)");
     });
     const ma30   = movingAvg(mids, 30);
     const ma90   = movingAvg(mids, 90);
@@ -364,15 +367,19 @@ const Charts = {
         hovertemplate:"MA30: %{y:,.0f}<extra></extra>" },
       { x:dates, y:ma90, name:"MA90", line:{color:"#e74c3c",width:1.5,dash:"dash"},
         hovertemplate:"MA90: %{y:,.0f}<extra></extra>" },
-      { x:dates, y:vols, name:"Volume", type:"bar", xaxis:"x2",
-        marker:{color:volColors}, yaxis:"y2",
-        hovertemplate:"Vol: %{y:,.0f}<extra></extra>" },
-      { x:dates, y:rsi, name:"RSI", line:{color:"#e67e22",width:1.5}, yaxis:"y3", xaxis:"x3",
+      { x:dates, y:vols, name:"Volume", type:"scatter", mode:"lines",
+        fill:"tozeroy", fillcolor:"rgba(93,173,226,0.25)",
+        line:{color:"rgba(93,173,226,0.4)", width:0.5},
+        yaxis:"y2", hovertemplate:"Vol: %{y:,.0f}<extra></extra>" },
+      { x:spkX, y:spkY, name:"Vol Spike", type:"scatter", mode:"markers",
+        marker:{color:spkC, size:7, symbol:"circle"},
+        yaxis:"y2", hovertemplate:"Spike: %{y:,.0f}<extra></extra>" },
+      { x:dates, y:rsi, name:"RSI", line:{color:"#e67e22",width:1.5}, yaxis:"y3",
         hovertemplate:"RSI: %{y:.1f}<extra></extra>" },
       { x:[dates[0],dates.at(-1)], y:[70,70], line:{color:"#e74c3c",dash:"dot",width:0.8},
-        yaxis:"y3", xaxis:"x3", showlegend:false, hoverinfo:"skip", mode:"lines" },
+        yaxis:"y3", showlegend:false, hoverinfo:"skip", mode:"lines" },
       { x:[dates[0],dates.at(-1)], y:[30,30], line:{color:"#2ecc71",dash:"dot",width:0.8},
-        yaxis:"y3", xaxis:"x3", showlegend:false, hoverinfo:"skip", mode:"lines" },
+        yaxis:"y3", showlegend:false, hoverinfo:"skip", mode:"lines" },
     ];
 
     const layout = {
@@ -381,15 +388,13 @@ const Charts = {
       hovermode:"x unified",
       hoverlabel:{ bgcolor:"#0a1428", bordercolor:"#5dade2", font:{color:"white",size:11} },
       legend:{ bgcolor:"#0d1b2a", bordercolor:"#333", borderwidth:1, x:0.01, y:0.99 },
-      xaxis:  { gridcolor:"#333", linecolor:"#444", showgrid:true, domain:[0,1], anchor:"y" },
-      xaxis2: { gridcolor:"#2a2a2a", linecolor:"#444", domain:[0,1], matches:"x", showticklabels:false, anchor:"y2" },
-      xaxis3: { gridcolor:"#2a2a2a", linecolor:"#444", domain:[0,1], matches:"x", showticklabels:false, anchor:"y3" },
+      xaxis:  { gridcolor:"#333", linecolor:"#444", showgrid:true, domain:[0,1] },
       yaxis:  { gridcolor:"#333", linecolor:"#444", title:"Price (gp)", domain:[0.35,1.0],
-                tickformat:",.0f", automargin:true, anchor:"x" },
+                tickformat:",.0f", automargin:true },
       yaxis2: { gridcolor:"#2a2a2a", linecolor:"#444", title:"Volume",  domain:[0.18,0.33],
-                automargin:true, anchor:"x2" },
+                automargin:true },
       yaxis3: { gridcolor:"#2a2a2a", linecolor:"#444", title:"RSI",     domain:[0,0.16],
-                range:[0,100], automargin:true, anchor:"x3" },
+                range:[0,100], automargin:true },
       margin: { l:70, r:20, t:40, b:40 },
     };
 
@@ -421,16 +426,19 @@ const Charts = {
     const dates = ts.map(d => new Date(d.timestamp*1000));
     const highs  = ts.map(d => d.avgHighPrice);
     const lows   = ts.map(d => d.avgLowPrice);
-    const vols      = ts.map(d => (d.highPriceVolume||0)+(d.lowPriceVolume||0));
-    const avgVolId  = movingAvg(vols, 30);
-    const volColId  = vols.map((v, i) => {
+    const vols     = ts.map(d => (d.highPriceVolume||0)+(d.lowPriceVolume||0));
+    const avgVolId = movingAvg(vols, 30);
+    const ispkX = [], ispkY = [], ispkC = [];
+    vols.forEach((v, i) => {
       const avg = avgVolId[i] || 1;
-      if (avg <= 0 || v <= 0) return "rgba(93,173,226,0.4)";
+      if (avg <= 0 || v <= 0) return;
       const ratio = v / avg;
-      if (ratio >= 3.0) return "rgba(231,76,60,0.8)";
-      if (ratio >= 2.0) return "rgba(243,156,18,0.8)";
-      if (ratio >= 1.5) return "rgba(155,89,182,0.6)";
-      return "rgba(93,173,226,0.4)";
+      if (ratio < 1.5) return;
+      ispkX.push(dates[i]);
+      ispkY.push(v);
+      ispkC.push(ratio >= 3.0 ? "rgba(231,76,60,0.9)" :
+                 ratio >= 2.0 ? "rgba(243,156,18,0.9)" :
+                                "rgba(155,89,182,0.8)");
     });
 
     const traces = [
@@ -439,9 +447,13 @@ const Charts = {
       { x:dates, y:lows, name:"Buy (low)", fill:"tonexty",
         fillcolor:"rgba(93,173,226,0.12)", line:{color:"rgba(46,204,113,0.6)",width:1.5},
         hovertemplate:"Buy: %{y:,.0f}<extra></extra>" },
-      { x:dates, y:vols, name:"Volume", type:"bar", xaxis:"x2",
-        marker:{color:volColId}, yaxis:"y2",
-        hovertemplate:"Vol: %{y:,.0f}<extra></extra>" },
+      { x:dates, y:vols, name:"Volume", type:"scatter", mode:"lines",
+        fill:"tozeroy", fillcolor:"rgba(93,173,226,0.25)",
+        line:{color:"rgba(93,173,226,0.4)", width:0.5},
+        yaxis:"y2", hovertemplate:"Vol: %{y:,.0f}<extra></extra>" },
+      { x:ispkX, y:ispkY, name:"Vol Spike", type:"scatter", mode:"markers",
+        marker:{color:ispkC, size:7, symbol:"circle"},
+        yaxis:"y2", hovertemplate:"Spike: %{y:,.0f}<extra></extra>" },
     ];
 
     const layout = {
@@ -450,12 +462,11 @@ const Charts = {
       hovermode:"x unified",
       hoverlabel:{ bgcolor:"#0a1428", bordercolor:"#5dade2", font:{color:"white",size:11} },
       legend:{ bgcolor:"#0d1b2a", bordercolor:"#333", borderwidth:1, x:0.01, y:0.99 },
-      xaxis:  { gridcolor:"#333", linecolor:"#444", showgrid:true, domain:[0,1], anchor:"y" },
-      xaxis2: { gridcolor:"#2a2a2a", linecolor:"#444", domain:[0,1], matches:"x", showticklabels:false, anchor:"y2" },
+      xaxis:  { gridcolor:"#333", linecolor:"#444", showgrid:true, domain:[0,1] },
       yaxis:  { gridcolor:"#333", linecolor:"#444", title:"Price (gp)", domain:[0.3,1.0],
-                tickformat:",.0f", automargin:true, anchor:"x" },
+                tickformat:",.0f", automargin:true },
       yaxis2: { gridcolor:"#2a2a2a", linecolor:"#444", title:"Volume", domain:[0,0.27],
-                automargin:true, anchor:"x2" },
+                automargin:true },
       margin: { l:70, r:20, t:40, b:40 },
     };
 
