@@ -244,8 +244,8 @@ const Dashboard = {
         <td style="color:${stratColor};font-weight:700">${r.strategy||"—"}</td>
         <td style="color:${scoreColor(sc)};font-weight:700">${sc.toFixed(0)}</td>
         <td>${fmtGP(r.current_low)}</td>
-        <td>${r.net_margin_pct!=null?fmtPct(r.net_margin_pct):"—"}</td>
-        <td>${fmtGP(r.daily_flip_profit)}</td>
+        <td>${r.avg_margin_taxed!=null?fmtPct(r.avg_margin_taxed):"—"}</td>
+        <td>${fmtGP(r.daily_avg_profit ?? r.daily_flip_profit)}</td>
         <td style="color:${changeColor(r.change_1d)}">${r.change_1d!=null?fmtPct(r.change_1d):"—"}</td>
         <td style="color:${changeColor(r.change_30d)}">${r.change_30d!=null?fmtPct(r.change_30d):"—"}</td>
         <td style="color:${rsiColor(r.rsi)}">${r.rsi!=null?r.rsi.toFixed(0):"—"}</td>
@@ -283,7 +283,7 @@ const Dashboard = {
         <div class="strat" style="color:${stratColor}">[${r.strategy||"?"}] ${news}</div>
         <div class="item-name">${pickIcon}${escHtml(r.name||"")}</div>
         <div class="score-line" style="color:${scoreColor(sc)}">Score: ${sc.toFixed(0)}</div>
-        <div class="detail-line">${fmtGP(r.current_low)} · ${fmtGP(r.daily_flip_profit)}/day</div>
+        <div class="detail-line">${fmtGP(r.current_low)} · ${fmtGP(r.daily_avg_profit ?? r.daily_flip_profit)}/day</div>
         <div class="detail-line" style="font-size:10px;color:#666">${escHtml((r.reason||"").slice(0,50))}</div>
       </div>`;
     }).join("");
@@ -363,9 +363,10 @@ const Charts = {
     const lows   = rows.map(d => d.avgLowPrice);
     const mids   = rows.map(d => (d.avgHighPrice+d.avgLowPrice)/2);
     const vols     = rows.map(d => (d.highPriceVolume||0)+(d.lowPriceVolume||0));
+    const hasVol   = vols.some(v => v > 0);
     const avgVol30 = movingAvg(vols, 30);
     const spkX = [], spkY = [], spkC = [];
-    vols.forEach((v, i) => {
+    if (hasVol) vols.forEach((v, i) => {
       const avg = avgVol30[i] || 1;
       if (avg <= 0 || v <= 0) return;
       const ratio = v / avg;
@@ -396,7 +397,7 @@ const Charts = {
         hovertemplate:"MA30: %{y:,.0f}<extra></extra>" },
       { x:dates, y:ma90, name:"MA90", line:{color:"#e74c3c",width:1.5,dash:"dash"},
         hovertemplate:"MA90: %{y:,.0f}<extra></extra>" },
-      { x:dates, y:vols, name:"Volume", type:"scatter", mode:"lines",
+      { x:dates, y:hasVol?vols:[], name:"Volume", type:"scatter", mode:"lines",
         fill:"tozeroy", fillcolor:"rgba(93,173,226,0.25)",
         line:{color:"rgba(93,173,226,0.4)", width:0.5},
         yaxis:"y2", hovertemplate:"Vol: %{y:,.0f}<extra></extra>" },
@@ -424,6 +425,10 @@ const Charts = {
                 automargin:true },
       yaxis3: { gridcolor:"#2a2a2a", linecolor:"#444", title:"RSI",     domain:[0,0.16],
                 range:[0,100], automargin:true },
+      annotations: hasVol ? [] : [{
+        x:0.5, y:0.255, xref:"paper", yref:"paper", showarrow:false,
+        text:"No volume data", font:{color:"#555", size:10}
+      }],
       margin: { l:70, r:20, t:40, b:40 },
     };
 
@@ -457,9 +462,10 @@ const Charts = {
     const highs  = ts.map(d => d.avgHighPrice);
     const lows   = ts.map(d => d.avgLowPrice);
     const vols     = ts.map(d => (d.highPriceVolume||0)+(d.lowPriceVolume||0));
+    const hasVolId = vols.some(v => v > 0);
     const avgVolId = movingAvg(vols, 30);
     const ispkX = [], ispkY = [], ispkC = [];
-    vols.forEach((v, i) => {
+    if (hasVolId) vols.forEach((v, i) => {
       const avg = avgVolId[i] || 1;
       if (avg <= 0 || v <= 0) return;
       const ratio = v / avg;
@@ -477,7 +483,7 @@ const Charts = {
       { x:dates, y:lows, name:"Buy (low)", fill:"tonexty",
         fillcolor:"rgba(93,173,226,0.12)", line:{color:"rgba(46,204,113,0.6)",width:1.5},
         hovertemplate:"Buy: %{y:,.0f}<extra></extra>" },
-      { x:dates, y:vols, name:"Volume", type:"scatter", mode:"lines",
+      { x:dates, y:hasVolId?vols:[], name:"Volume", type:"scatter", mode:"lines",
         fill:"tozeroy", fillcolor:"rgba(93,173,226,0.25)",
         line:{color:"rgba(93,173,226,0.4)", width:0.5},
         yaxis:"y2", hovertemplate:"Vol: %{y:,.0f}<extra></extra>" },
@@ -497,6 +503,10 @@ const Charts = {
                 tickformat:",.0f", automargin:true },
       yaxis2: { gridcolor:"#2a2a2a", linecolor:"#444", title:"Volume", domain:[0,0.27],
                 automargin:true },
+      annotations: hasVolId ? [] : [{
+        x:0.5, y:0.135, xref:"paper", yref:"paper", showarrow:false,
+        text:"No volume data", font:{color:"#555", size:10}
+      }],
       margin: { l:70, r:20, t:40, b:40 },
     };
 
@@ -652,8 +662,8 @@ const Watchlist = {
         <td style="color:${stc};font-weight:700">${r.strategy||"—"}</td>
         <td>${sc_}</td>
         <td>${fmtGP(r.current_low)}</td>
-        <td>${r.net_margin_pct!=null?fmtPct(r.net_margin_pct):"—"}</td>
-        <td>${fmtGP(r.daily_flip_profit)}</td>
+        <td>${r.avg_margin_taxed!=null?fmtPct(r.avg_margin_taxed):"—"}</td>
+        <td>${fmtGP(r.daily_avg_profit ?? r.daily_flip_profit)}</td>
         <td style="color:${changeColor(r.change_1d)}">${r.change_1d!=null?fmtPct(r.change_1d):"—"}</td>
         <td style="color:${changeColor(r.change_30d)}">${r.change_30d!=null?fmtPct(r.change_30d):"—"}</td>
         <td style="color:${rsiColor(r.rsi)}">${r.rsi!=null?r.rsi.toFixed(0):"—"}</td>

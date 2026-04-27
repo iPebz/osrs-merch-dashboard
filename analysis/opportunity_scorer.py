@@ -109,6 +109,10 @@ def score_item(timeseries: list[dict], buy_limit: int,
     merch_target = max(res, ma90_val)
     merch_profit = max(0.0, (merch_target - current_low) * buy_limit) if buy_limit > 0 else 0.0
 
+    # ── Avg-margin-based daily profit (for display and universal floor) ───
+    avg_margin_gp    = max(0.0, avg_margin_taxed / 100.0 * current_low)
+    daily_avg_profit = estimated_daily_flip_profit(avg_margin_gp, buy_limit, avg_daily_vol)
+
     # ── Guards ────────────────────────────────────────────────────────────
     if avg_daily_vol < MIN_VOLUME:
         return {"score": 0, "reason": "Volume too low"}
@@ -157,6 +161,16 @@ def score_item(timeseries: list[dict], buy_limit: int,
     elif vol_spike >= 1.5:
         score +=  3; reason_parts.append(f"vol spike {vol_spike:.1f}x avg (+3)")
 
+    # ── Universal GP/day floor for TREND (FLIP has its own; MERCH uses merch_profit) ──
+    # Prevents cheap/illiquid items from reaching top scores purely on % metrics.
+    if strategy == "TREND":
+        if daily_avg_profit < 50_000:
+            score -= 22; reason_parts.append(f"daily profit ~{_fmt_gp(int(daily_avg_profit))} too low (−22)")
+        elif daily_avg_profit < 200_000:
+            score -= 12; reason_parts.append(f"daily profit ~{_fmt_gp(int(daily_avg_profit))} below target (−12)")
+        elif daily_avg_profit < 500_000:
+            score -=  5; reason_parts.append(f"daily profit ~{_fmt_gp(int(daily_avg_profit))} moderate (−5)")
+
     # ── Universal news boost for non-NEWS items with weak signals ─────────
     if strategy != "NEWS":
         news_boost, news_label = _calc_news_boost(news_signals)
@@ -194,6 +208,7 @@ def score_item(timeseries: list[dict], buy_limit: int,
         "avg_daily_vol":     round(avg_daily_vol),
         "buy_limit":         buy_limit,
         "daily_flip_profit": round(daily_flip_profit),
+        "daily_avg_profit":  round(daily_avg_profit),
         "merch_profit":      round(merch_profit),
         "strategy":          strategy,
         "vol_spike_ratio":   round(vol_spike, 2),

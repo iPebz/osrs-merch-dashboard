@@ -9,7 +9,7 @@ WEIGHT_VOLUME = 0.7
 
 DEFAULT_SCORE_THRESHOLD    = 40
 REFRESH_INTERVAL_SECONDS   = 60
-MIN_DAILY_VOLUME           = 50   # lowered — catches bulk commodity items
+MIN_DAILY_VOLUME           = 100  # minimum avg daily volume to appear in results
 ALERT_COOLDOWN_MINUTES     = 60
 
 DB_PATH = "data/ge_prices.db"
