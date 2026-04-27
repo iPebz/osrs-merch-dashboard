@@ -337,7 +337,17 @@ const Charts = {
     const highs  = rows.map(d => d.avgHighPrice);
     const lows   = rows.map(d => d.avgLowPrice);
     const mids   = rows.map(d => (d.avgHighPrice+d.avgLowPrice)/2);
-    const vols   = rows.map(d => (d.highPriceVolume||0)+(d.lowPriceVolume||0));
+    const vols      = rows.map(d => (d.highPriceVolume||0)+(d.lowPriceVolume||0));
+    const avgVol30  = movingAvg(vols, 30);
+    const volColors = vols.map((v, i) => {
+      const avg = avgVol30[i] || 1;
+      if (avg <= 0 || v <= 0) return "rgba(93,173,226,0.5)";
+      const ratio = v / avg;
+      if (ratio >= 3.0) return "rgba(231,76,60,0.85)";
+      if (ratio >= 2.0) return "rgba(243,156,18,0.85)";
+      if (ratio >= 1.5) return "rgba(155,89,182,0.7)";
+      return "rgba(93,173,226,0.5)";
+    });
     const ma30   = movingAvg(mids, 30);
     const ma90   = movingAvg(mids, 90);
     const rsi    = calcRSI(mids, 14);
@@ -354,15 +364,15 @@ const Charts = {
         hovertemplate:"MA30: %{y:,.0f}<extra></extra>" },
       { x:dates, y:ma90, name:"MA90", line:{color:"#e74c3c",width:1.5,dash:"dash"},
         hovertemplate:"MA90: %{y:,.0f}<extra></extra>" },
-      { x:dates, y:vols, name:"Volume", type:"bar",
-        marker:{color:"rgba(93,173,226,0.45)"}, yaxis:"y2",
+      { x:dates, y:vols, name:"Volume", type:"bar", xaxis:"x2",
+        marker:{color:volColors}, yaxis:"y2",
         hovertemplate:"Vol: %{y:,.0f}<extra></extra>" },
-      { x:dates, y:rsi, name:"RSI", line:{color:"#e67e22",width:1.5}, yaxis:"y3",
+      { x:dates, y:rsi, name:"RSI", line:{color:"#e67e22",width:1.5}, yaxis:"y3", xaxis:"x3",
         hovertemplate:"RSI: %{y:.1f}<extra></extra>" },
       { x:[dates[0],dates.at(-1)], y:[70,70], line:{color:"#e74c3c",dash:"dot",width:0.8},
-        yaxis:"y3", showlegend:false, hoverinfo:"skip", mode:"lines" },
+        yaxis:"y3", xaxis:"x3", showlegend:false, hoverinfo:"skip", mode:"lines" },
       { x:[dates[0],dates.at(-1)], y:[30,30], line:{color:"#2ecc71",dash:"dot",width:0.8},
-        yaxis:"y3", showlegend:false, hoverinfo:"skip", mode:"lines" },
+        yaxis:"y3", xaxis:"x3", showlegend:false, hoverinfo:"skip", mode:"lines" },
     ];
 
     const layout = {
@@ -371,13 +381,15 @@ const Charts = {
       hovermode:"x unified",
       hoverlabel:{ bgcolor:"#0a1428", bordercolor:"#5dade2", font:{color:"white",size:11} },
       legend:{ bgcolor:"#0d1b2a", bordercolor:"#333", borderwidth:1, x:0.01, y:0.99 },
-      xaxis:  { gridcolor:"#333", linecolor:"#444", showgrid:true, domain:[0,1] },
+      xaxis:  { gridcolor:"#333", linecolor:"#444", showgrid:true, domain:[0,1], anchor:"y" },
+      xaxis2: { gridcolor:"#2a2a2a", linecolor:"#444", domain:[0,1], matches:"x", showticklabels:false, anchor:"y2" },
+      xaxis3: { gridcolor:"#2a2a2a", linecolor:"#444", domain:[0,1], matches:"x", showticklabels:false, anchor:"y3" },
       yaxis:  { gridcolor:"#333", linecolor:"#444", title:"Price (gp)", domain:[0.35,1.0],
-                tickformat:",.0f", automargin:true },
+                tickformat:",.0f", automargin:true, anchor:"x" },
       yaxis2: { gridcolor:"#2a2a2a", linecolor:"#444", title:"Volume",  domain:[0.18,0.33],
-                automargin:true },
+                automargin:true, anchor:"x2" },
       yaxis3: { gridcolor:"#2a2a2a", linecolor:"#444", title:"RSI",     domain:[0,0.16],
-                range:[0,100], automargin:true },
+                range:[0,100], automargin:true, anchor:"x3" },
       margin: { l:70, r:20, t:40, b:40 },
     };
 
@@ -409,7 +421,17 @@ const Charts = {
     const dates = ts.map(d => new Date(d.timestamp*1000));
     const highs  = ts.map(d => d.avgHighPrice);
     const lows   = ts.map(d => d.avgLowPrice);
-    const vols   = ts.map(d => (d.highPriceVolume||0)+(d.lowPriceVolume||0));
+    const vols      = ts.map(d => (d.highPriceVolume||0)+(d.lowPriceVolume||0));
+    const avgVolId  = movingAvg(vols, 30);
+    const volColId  = vols.map((v, i) => {
+      const avg = avgVolId[i] || 1;
+      if (avg <= 0 || v <= 0) return "rgba(93,173,226,0.4)";
+      const ratio = v / avg;
+      if (ratio >= 3.0) return "rgba(231,76,60,0.8)";
+      if (ratio >= 2.0) return "rgba(243,156,18,0.8)";
+      if (ratio >= 1.5) return "rgba(155,89,182,0.6)";
+      return "rgba(93,173,226,0.4)";
+    });
 
     const traces = [
       { x:dates, y:highs, name:"Sell (high)", line:{color:"rgba(93,173,226,0.7)",width:1.5},
@@ -417,8 +439,8 @@ const Charts = {
       { x:dates, y:lows, name:"Buy (low)", fill:"tonexty",
         fillcolor:"rgba(93,173,226,0.12)", line:{color:"rgba(46,204,113,0.6)",width:1.5},
         hovertemplate:"Buy: %{y:,.0f}<extra></extra>" },
-      { x:dates, y:vols, name:"Volume", type:"bar",
-        marker:{color:"rgba(93,173,226,0.4)"}, yaxis:"y2",
+      { x:dates, y:vols, name:"Volume", type:"bar", xaxis:"x2",
+        marker:{color:volColId}, yaxis:"y2",
         hovertemplate:"Vol: %{y:,.0f}<extra></extra>" },
     ];
 
@@ -428,12 +450,13 @@ const Charts = {
       hovermode:"x unified",
       hoverlabel:{ bgcolor:"#0a1428", bordercolor:"#5dade2", font:{color:"white",size:11} },
       legend:{ bgcolor:"#0d1b2a", bordercolor:"#333", borderwidth:1, x:0.01, y:0.99 },
-      xaxis: { gridcolor:"#333", linecolor:"#444", showgrid:true, domain:[0,1] },
-      yaxis: { gridcolor:"#333", linecolor:"#444", title:"Price (gp)", domain:[0.3,1.0],
-               tickformat:",.0f", automargin:true },
-      yaxis2:{ gridcolor:"#2a2a2a", linecolor:"#444", title:"Volume", domain:[0,0.27],
-               automargin:true },
-      margin:{ l:70, r:20, t:40, b:40 },
+      xaxis:  { gridcolor:"#333", linecolor:"#444", showgrid:true, domain:[0,1], anchor:"y" },
+      xaxis2: { gridcolor:"#2a2a2a", linecolor:"#444", domain:[0,1], matches:"x", showticklabels:false, anchor:"y2" },
+      yaxis:  { gridcolor:"#333", linecolor:"#444", title:"Price (gp)", domain:[0.3,1.0],
+                tickformat:",.0f", automargin:true, anchor:"x" },
+      yaxis2: { gridcolor:"#2a2a2a", linecolor:"#444", title:"Volume", domain:[0,0.27],
+                automargin:true, anchor:"x2" },
+      margin: { l:70, r:20, t:40, b:40 },
     };
 
     Plotly.react("chart-container", traces, layout, {responsive:true, displayModeBar:false});
@@ -494,6 +517,14 @@ const Charts = {
           parts.push(`<div class="cs-item"><span class="cs-label">RSI (14)</span><span class="cs-value" style="color:${rsiColor(rsiVal)}">${rsiVal.toFixed(0)}</span></div>`);
       }
       const avgVol = Math.round(rows.reduce((s,r) => s+(r.highPriceVolume||0)+(r.lowPriceVolume||0),0) / rows.length);
+      const lastVol = (rows[rows.length-1].highPriceVolume||0)+(rows[rows.length-1].lowPriceVolume||0);
+      if (avgVol > 0 && lastVol > 0) {
+        const spikeRatio = lastVol / avgVol;
+        if (spikeRatio >= 1.5) {
+          const spColor = spikeRatio >= 3.0 ? "#e74c3c" : spikeRatio >= 2.0 ? "#f39c12" : "#9b59b6";
+          parts.push(`<div class="cs-item"><span class="cs-label">Vol Spike</span><span class="cs-value" style="color:${spColor}">${spikeRatio.toFixed(1)}× avg</span></div>`);
+        }
+      }
       parts.push(`<div class="cs-item"><span class="cs-label">Avg Vol/day</span><span class="cs-value">${avgVol.toLocaleString()}</span></div>`);
     }
 

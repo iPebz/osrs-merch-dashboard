@@ -275,6 +275,26 @@ def falling_knife_risk(df: pd.DataFrame, slope_threshold: float = -0.5,
     return price_slope(df, 90) < slope_threshold and rsi(df) < rsi_ceiling
 
 
+def volume_spike_ratio(df: pd.DataFrame, lookback: int = 30) -> float:
+    """
+    Ratio of the most recent candle's total volume to the lookback-day average.
+    1.5 = notable, 2.0 = significant, 3.0+ = very significant spike.
+    Ignores candles with zero volume (e.g. the real-time price overlay).
+    """
+    if len(df) < 5:
+        return 1.0
+    vol_series = df["total_vol"].replace(0, np.nan).dropna()
+    if len(vol_series) < 5:
+        return 1.0
+    avg_vol = float(vol_series.tail(lookback).mean())
+    if pd.isna(avg_vol) or avg_vol <= 0:
+        return 1.0
+    current_vol = float(vol_series.iloc[-1])
+    if current_vol <= 0:
+        return 1.0
+    return current_vol / avg_vol
+
+
 def average_margin_pct_taxed(df: pd.DataFrame, days: int = 14,
                               tax_rate: float = 0.01,
                               tax_cap: float = 5_000_000) -> float:

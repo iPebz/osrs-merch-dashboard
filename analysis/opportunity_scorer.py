@@ -30,6 +30,7 @@ from analysis.trend_analyzer import (
     moving_average, price_change_pct,
     macd, bollinger_bands, volume_price_divergence,
     falling_knife_risk, average_margin_pct_taxed,
+    volume_spike_ratio,
 )
 
 GE_TAX_RATE = 0.01
@@ -101,6 +102,7 @@ def score_item(timeseries: list[dict], buy_limit: int,
     bb               = bollinger_bands(df)
     vpd              = volume_price_divergence(df)
     knife_risk       = falling_knife_risk(df)
+    vol_spike        = volume_spike_ratio(df, 30)
 
     # ── Merch potential ───────────────────────────────────────────────────
     ma90_val     = float(moving_average(df, 90).iloc[-1])
@@ -118,7 +120,8 @@ def score_item(timeseries: list[dict], buy_limit: int,
     strategy = _classify_strategy(
         df, slope_90d, item_rsi, is_dip, avg_margin_taxed,
         liq, mtf_score, news_signals,
-        current_low=current_low, merch_profit=merch_profit, knife_risk=knife_risk,
+        current_low=current_low, merch_profit=merch_profit,
+        knife_risk=knife_risk, vol_spike=vol_spike,
     )
 
     # ── Strategy-specific scoring ─────────────────────────────────────────
@@ -145,6 +148,14 @@ def score_item(timeseries: list[dict], buy_limit: int,
             score, reason_parts,
             news_signals, ma_deviation, item_rsi, vol_t, mtf_score, liq,
         )
+
+    # ── Universal volume spike bonus (all strategies) ─────────────────────
+    if vol_spike >= 3.0:
+        score += 15; reason_parts.append(f"vol spike {vol_spike:.1f}x avg (+15)")
+    elif vol_spike >= 2.0:
+        score += 10; reason_parts.append(f"vol spike {vol_spike:.1f}x avg (+10)")
+    elif vol_spike >= 1.5:
+        score +=  5; reason_parts.append(f"vol spike {vol_spike:.1f}x avg (+5)")
 
     # ── Universal news boost for non-NEWS items with weak signals ─────────
     if strategy != "NEWS":
@@ -185,6 +196,7 @@ def score_item(timeseries: list[dict], buy_limit: int,
         "daily_flip_profit": round(daily_flip_profit),
         "merch_profit":      round(merch_profit),
         "strategy":          strategy,
+        "vol_spike_ratio":   round(vol_spike, 2),
         "news_signals":      news_signals or [],
         "reason":            reason,
     }
@@ -459,7 +471,7 @@ def _score_news(score, parts, news_signals, ma_deviation, item_rsi, vol_t,
 
 def _classify_strategy(df, slope_90d, rsi_val, is_dip, avg_margin_taxed,
                         liq, mtf_score, news_signals,
-                        current_low=0, merch_profit=0, knife_risk=False):
+                        current_low=0, merch_profit=0, knife_risk=False, vol_spike=1.0):
     # NEWS: strong catalyst overrides all technical classifications.
     # Single "mentioned" is too weak; require game_update, ge_rise, or 3+ mentions.
     if news_signals:
@@ -473,6 +485,11 @@ def _classify_strategy(df, slope_90d, rsi_val, is_dip, avg_margin_taxed,
     # Using avg_margin_taxed prevents single-candle manipulation from triggering FLIP.
     if avg_margin_taxed >= 2.0 and liq >= 1.5 and liq > 0 and slope_90d > -1.0:
         return "FLIP"
+
+    # VOLUME SPIKE TREND: 2x+ volume on a non-downtrending item signals accumulation
+    # by large players / merch clans — classify as TREND before checking normal conditions.
+    if vol_spike >= 2.0 and slope_90d > -0.5 and not knife_risk:
+        return "TREND"
 
     # MERCH: genuine dip, intact long-term trend, not a falling knife.
     # Minimum price and profit thresholds exclude micro-price noise.
