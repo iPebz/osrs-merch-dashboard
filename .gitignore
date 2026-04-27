@@ -1,6 +1,5 @@
-# Database files
-data/*.db
-data/*.sqlite
+# Runtime data (SQLite database, cached icons, downloaded assets)
+data/
 
 # Python cache
 __pycache__/
