@@ -143,13 +143,7 @@ function pollStatus() {
 // ═══════════════════════════════════════════════════
 document.querySelectorAll(".tab-btn").forEach(btn => {
   btn.addEventListener("click", () => {
-    document.querySelectorAll(".tab-btn").forEach(b => b.classList.remove("active"));
-    document.querySelectorAll(".tab-content").forEach(c => c.classList.add("hidden"));
-    btn.classList.add("active");
-    document.getElementById("tab-"+btn.dataset.tab).classList.remove("hidden");
-    // Lazy-load on first visit
-    if (btn.dataset.tab === "recommendations" && !Recs._loaded) Recs.load();
-    if (btn.dataset.tab === "watchlist") Watchlist.load();
+    switchTab(btn.dataset.tab);
   });
 });
 
@@ -322,7 +316,7 @@ document.getElementById("f-min-price").addEventListener("input", () => Dashboard
 // CHARTS
 // ═══════════════════════════════════════════════════
 const Charts = {
-  _currentDays:     90,
+  _currentDays:     30,
   _currentId:       null,
   _currentData:     null,
   _currentIntraday: null,
@@ -422,7 +416,7 @@ const Charts = {
       yaxis:  { gridcolor:"#333", linecolor:"#444", title:"Price (gp)", domain:[0.35,1.0],
                 tickformat:",.0f", automargin:true },
       yaxis2: { gridcolor:"#2a2a2a", linecolor:"#444", title:"Volume",  domain:[0.18,0.33],
-                automargin:true },
+                automargin:true, ...(hasVol ? {} : {range:[0,100]}) },
       yaxis3: { gridcolor:"#2a2a2a", linecolor:"#444", title:"RSI",     domain:[0,0.16],
                 range:[0,100], automargin:true },
       annotations: hasVol ? [] : [{
@@ -433,7 +427,10 @@ const Charts = {
     };
 
     Plotly.react("chart-container", traces, layout, {responsive:true, displayModeBar:false});
-    requestAnimationFrame(() => Plotly.Plots.resize("chart-container"));
+    requestAnimationFrame(() => {
+      Plotly.Plots.resize("chart-container");
+      requestAnimationFrame(() => Plotly.Plots.resize("chart-container"));
+    });
     this._updateStats(rows, false);
   },
 
@@ -502,7 +499,7 @@ const Charts = {
       yaxis:  { gridcolor:"#333", linecolor:"#444", title:"Price (gp)", domain:[0.3,1.0],
                 tickformat:",.0f", automargin:true },
       yaxis2: { gridcolor:"#2a2a2a", linecolor:"#444", title:"Volume", domain:[0,0.27],
-                automargin:true },
+                automargin:true, ...(hasVolId ? {} : {range:[0,100]}) },
       annotations: hasVolId ? [] : [{
         x:0.5, y:0.135, xref:"paper", yref:"paper", showarrow:false,
         text:"No volume data", font:{color:"#555", size:10}
@@ -511,7 +508,10 @@ const Charts = {
     };
 
     Plotly.react("chart-container", traces, layout, {responsive:true, displayModeBar:false});
-    requestAnimationFrame(() => Plotly.Plots.resize("chart-container"));
+    requestAnimationFrame(() => {
+      Plotly.Plots.resize("chart-container");
+      requestAnimationFrame(() => Plotly.Plots.resize("chart-container"));
+    });
     this._updateStats(ts, true);
   },
 
@@ -1029,6 +1029,13 @@ function switchTab(name) {
     c.classList.toggle("hidden", !c.id.endsWith(name)));
   if (name==="recommendations" && !Recs._loaded) Recs.load();
   if (name==="watchlist") Watchlist.load();
+  if (name==="charts") {
+    // Re-run resize after tab becomes visible so Plotly sub-panels lay out correctly
+    setTimeout(() => {
+      const c = document.getElementById("chart-container");
+      if (c && c._fullLayout) Plotly.Plots.resize(c);
+    }, 50);
+  }
 }
 
 // ═══════════════════════════════════════════════════
