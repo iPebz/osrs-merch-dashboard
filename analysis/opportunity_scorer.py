@@ -109,8 +109,15 @@ def score_item(timeseries: list[dict], buy_limit: int,
     merch_target = max(res, ma90_val)
     merch_profit = max(0.0, (merch_target - current_low) * buy_limit) if buy_limit > 0 else 0.0
 
+    # ── Effective margin: prefer 14-day avg; fall back to instant spread ──
+    # avg_margin_taxed can be 0 when historical candles have one-sided null
+    # prices (e.g. no sell offers completed for the item that day).  Using
+    # net_margin_pct (live instant spread, updated every 60 s) is more
+    # informative than forcing a 0 in that case.
+    effective_margin = avg_margin_taxed if avg_margin_taxed > 0 else net_margin_pct
+
     # ── Avg-margin-based daily profit (for display and universal floor) ───
-    avg_margin_gp    = max(0.0, avg_margin_taxed / 100.0 * current_low)
+    avg_margin_gp    = max(0.0, effective_margin / 100.0 * current_low)
     daily_avg_profit = estimated_daily_flip_profit(avg_margin_gp, buy_limit, avg_daily_vol)
 
     # ── Guards ────────────────────────────────────────────────────────────
@@ -122,7 +129,7 @@ def score_item(timeseries: list[dict], buy_limit: int,
 
     # ── Strategy classification (FIRST) ──────────────────────────────────
     strategy = _classify_strategy(
-        df, slope_90d, item_rsi, is_dip, avg_margin_taxed,
+        df, slope_90d, item_rsi, is_dip, effective_margin,
         liq, mtf_score, news_signals,
         current_low=current_low, merch_profit=merch_profit,
         knife_risk=knife_risk, vol_spike=vol_spike,
@@ -135,7 +142,7 @@ def score_item(timeseries: list[dict], buy_limit: int,
     if strategy == "FLIP":
         score = _score_flip(
             score, reason_parts,
-            avg_margin_taxed, liq, vol_t, vpd, bb, net_margin_pct, daily_flip_profit,
+            effective_margin, liq, vol_t, vpd, bb, net_margin_pct, daily_flip_profit,
         )
     elif strategy == "MERCH":
         score = _score_merch(

@@ -38,6 +38,18 @@ function parsePrice(s) {
   return isNaN(n) ? 2e9 : n*1e6;
 }
 
+// Margin%: prefer 14-day avg after tax; fall back to live instant spread when avg is 0
+// (happens when candles have null prices on one side — e.g. one-sided illiquid markets)
+function bestMarginPct(r) {
+  if (r.avg_margin_taxed != null && r.avg_margin_taxed !== 0) return r.avg_margin_taxed;
+  return r.net_margin_pct ?? null;
+}
+
+// GP/day: prefer avg-margin-based; fall back to instant-spread-based when avg is 0
+function bestGPday(r) {
+  return r.daily_avg_profit || r.daily_flip_profit || 0;
+}
+
 function parseGP(s) {
   s = (s||"").trim().replace(/,/g,"").toUpperCase();
   if (!s) return null;
@@ -238,8 +250,8 @@ const Dashboard = {
         <td style="color:${stratColor};font-weight:700">${r.strategy||"—"}</td>
         <td style="color:${scoreColor(sc)};font-weight:700">${sc.toFixed(0)}</td>
         <td>${fmtGP(r.current_low)}</td>
-        <td>${r.avg_margin_taxed!=null?fmtPct(r.avg_margin_taxed):"—"}</td>
-        <td>${fmtGP(r.daily_avg_profit ?? r.daily_flip_profit)}</td>
+        <td>${fmtPct(bestMarginPct(r))}</td>
+        <td>${fmtGP(bestGPday(r))}</td>
         <td style="color:${changeColor(r.change_1d)}">${r.change_1d!=null?fmtPct(r.change_1d):"—"}</td>
         <td style="color:${changeColor(r.change_30d)}">${r.change_30d!=null?fmtPct(r.change_30d):"—"}</td>
         <td style="color:${rsiColor(r.rsi)}">${r.rsi!=null?r.rsi.toFixed(0):"—"}</td>
@@ -277,7 +289,7 @@ const Dashboard = {
         <div class="strat" style="color:${stratColor}">[${r.strategy||"?"}] ${news}</div>
         <div class="item-name">${pickIcon}${escHtml(r.name||"")}</div>
         <div class="score-line" style="color:${scoreColor(sc)}">Score: ${sc.toFixed(0)}</div>
-        <div class="detail-line">${fmtGP(r.current_low)} · ${fmtGP(r.daily_avg_profit ?? r.daily_flip_profit)}/day</div>
+        <div class="detail-line">${fmtGP(r.current_low)} · ${fmtGP(bestGPday(r))}/day</div>
         <div class="detail-line" style="font-size:10px;color:#666">${escHtml((r.reason||"").slice(0,50))}</div>
       </div>`;
     }).join("");
@@ -662,8 +674,8 @@ const Watchlist = {
         <td style="color:${stc};font-weight:700">${r.strategy||"—"}</td>
         <td>${sc_}</td>
         <td>${fmtGP(r.current_low)}</td>
-        <td>${r.avg_margin_taxed!=null?fmtPct(r.avg_margin_taxed):"—"}</td>
-        <td>${fmtGP(r.daily_avg_profit ?? r.daily_flip_profit)}</td>
+        <td>${fmtPct(bestMarginPct(r))}</td>
+        <td>${fmtGP(bestGPday(r))}</td>
         <td style="color:${changeColor(r.change_1d)}">${r.change_1d!=null?fmtPct(r.change_1d):"—"}</td>
         <td style="color:${changeColor(r.change_30d)}">${r.change_30d!=null?fmtPct(r.change_30d):"—"}</td>
         <td style="color:${rsiColor(r.rsi)}">${r.rsi!=null?r.rsi.toFixed(0):"—"}</td>
