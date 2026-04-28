@@ -101,6 +101,7 @@ let _statusInterval = null;
 let _lastScoredCount = 0;
 
 let _lastRefreshedAt = 0;
+let _lastScoredAt   = 0;
 
 function _ageStr(ts) {
   if (!ts) return "";
@@ -131,9 +132,14 @@ function pollStatus() {
   _statusInterval = setInterval(async () => {
     try {
       const s = await api("/api/status");
-      const age = s.refreshed_at ? ` · prices ${_ageStr(s.refreshed_at)}` : "";
-      statusText.textContent = s.message + age;
+      const priceAge  = s.refreshed_at ? ` · prices ${_ageStr(s.refreshed_at)}` : "";
+      const scoreAge  = s.scored_at    ? ` · scored ${_ageStr(s.scored_at)}`    : "";
+      statusText.textContent = s.message + priceAge + scoreAge;
       statusDot.className = "dot " + (s.running ? "running" : "idle");
+      // Track scored_at — dashboard reloads handled below
+      if (s.scored_at && s.scored_at !== _lastScoredAt) {
+        _lastScoredAt = s.scored_at;
+      }
       // Auto-reload dashboard whenever the scored-item count increases
       if ((s.count || 0) > _lastScoredCount) {
         _lastScoredCount = s.count;
@@ -251,7 +257,7 @@ const Dashboard = {
         <td style="color:${scoreColor(sc)};font-weight:700">${sc.toFixed(0)}</td>
         <td>${fmtGP(r.current_low)}</td>
         <td>${fmtPct(bestMarginPct(r))}</td>
-        <td>${fmtGP(bestGPday(r))}</td>
+        <td>${r.buy_limit!=null?r.buy_limit.toLocaleString():"—"}</td>
         <td style="color:${changeColor(r.change_1d)}">${r.change_1d!=null?fmtPct(r.change_1d):"—"}</td>
         <td style="color:${changeColor(r.change_30d)}">${r.change_30d!=null?fmtPct(r.change_30d):"—"}</td>
         <td style="color:${rsiColor(r.rsi)}">${r.rsi!=null?r.rsi.toFixed(0):"—"}</td>
@@ -675,7 +681,7 @@ const Watchlist = {
         <td>${sc_}</td>
         <td>${fmtGP(r.current_low)}</td>
         <td>${fmtPct(bestMarginPct(r))}</td>
-        <td>${fmtGP(bestGPday(r))}</td>
+        <td>${r.buy_limit!=null?r.buy_limit.toLocaleString():"—"}</td>
         <td style="color:${changeColor(r.change_1d)}">${r.change_1d!=null?fmtPct(r.change_1d):"—"}</td>
         <td style="color:${changeColor(r.change_30d)}">${r.change_30d!=null?fmtPct(r.change_30d):"—"}</td>
         <td style="color:${rsiColor(r.rsi)}">${r.rsi!=null?r.rsi.toFixed(0):"—"}</td>

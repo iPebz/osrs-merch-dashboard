@@ -63,7 +63,7 @@ def _sanitize(obj):
 _db:     sqlite3.Connection | None = None
 _svc:    DataService        | None = None
 _cache:  list[dict] = []          # scored items
-_status: dict = {"message": "Starting…", "running": False, "count": 0, "refreshed_at": 0}
+_status: dict = {"message": "Starting…", "running": False, "count": 0, "refreshed_at": 0, "scored_at": 0}
 _lock = threading.Lock()
 
 
@@ -88,13 +88,15 @@ def _do_score():
     try:
         results = _svc.score_all_items()
         _cache = [_sanitize(r) for r in results]
-        # Merge icon URLs from DB into cached items
         icon_map = get_item_icon_urls(_db)
         for item in _cache:
             fname = icon_map.get(item.get("item_id"))
             if fname:
                 item["icon_url"] = _WIKI_CDN + fname.replace(" ", "_")
         _patch_cache_prices()
+        import time as _time
+        with _lock:
+            _status["scored_at"] = int(_time.time())
         _set(f"Ready — {len(results)} items scored", count=len(results))
     except Exception as e:
         log.error("Scoring failed: %s", e)
@@ -184,6 +186,17 @@ async def lifespan(app: FastAPI):
         import time; time.sleep(70)
         threading.Thread(target=_do_score, daemon=True).start()
     threading.Thread(target=_delayed, daemon=True).start()
+
+    # Auto-rescore every AUTO_SCORE_INTERVAL_MINUTES in the background
+    def _auto_score_loop():
+        import time
+        interval = config.AUTO_SCORE_INTERVAL_MINUTES * 60
+        while True:
+            time.sleep(interval)
+            if not _status.get("running"):
+                log.info("Auto-rescore triggered (every %d min).", config.AUTO_SCORE_INTERVAL_MINUTES)
+                threading.Thread(target=_do_score, daemon=True).start()
+    threading.Thread(target=_auto_score_loop, daemon=True).start()
 
     yield
 

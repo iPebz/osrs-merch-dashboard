@@ -164,15 +164,30 @@ def estimated_daily_flip_profit(margin_gp: float, buy_limit: int,
 
 def price_change_pct(df: pd.DataFrame, days: int = 1) -> float | None:
     """Actual % price change from `days` candles ago to the most recent candle.
-    Returns None when there is not enough history — the caller should surface
-    this as '—' rather than a misleading 0.0%.
+    Returns None when there is not enough history or when the reference candles
+    are too close in time — the caller should surface this as '—' rather than
+    a misleading 0.0% (e.g. bulk-24h candle + same-day latest overlay).
     """
     if len(df) < days + 1:
         return None
-    old = df["mid"].iloc[-(days + 1)]
-    new = df["mid"].iloc[-1]
+    old_row = df.iloc[-(days + 1)]
+    new_row = df.iloc[-1]
+    old = old_row["mid"]
+    new = new_row["mid"]
     if pd.isna(old) or pd.isna(new) or old == 0:
         return None
+    # Require the two reference candles to span at least 75% of the expected
+    # period to prevent near-zero spurious readings from same-day candles.
+    if "timestamp" in df.columns:
+        old_ts = old_row["timestamp"]
+        new_ts = new_row["timestamp"]
+        min_seconds = days * 24 * 3600 * 0.75
+        try:
+            span = (new_ts - old_ts).total_seconds()
+        except Exception:
+            span = float(new_ts) - float(old_ts)
+        if span < min_seconds:
+            return None
     return float((new - old) / old * 100)
 
 
